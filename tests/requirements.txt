@@ -1,0 +1,32 @@
+# Зависимости для тестирования Quiz App API
+
+# Основные тестовые фреймворки
+pytest==7.4.0
+pytest-asyncio==0.21.1
+pytest-mock==3.11.1
+pytest-httpx==0.27.0
+pytest-html==4.1.1
+pytest-cov==4.1.0
+pytest-xdist==3.3.1
+
+# HTTP клиенты
+httpx==0.25.0
+
+# База данных
+sqlmodel==0.0.11
+sqlalchemy[asyncio]==2.0.23
+aiosqlite==0.19.0
+asyncpg==0.29.0
+
+# Утилиты
+pydantic==2.5.0
+faker==20.1.0
+factory-boy==3.3.0
+
+# Мокирование
+responses==0.24.1
+aioresponses==0.7.5
+
+# Дополнительные утилиты
+coverage==7.3.2
+pre-commit==3.5.0 

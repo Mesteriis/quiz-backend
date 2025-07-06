@@ -1,0 +1,481 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "quiz-app"
+version = "1.0.0"
+description = "Interactive Quiz Application with Telegram integration and comprehensive testing system"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+    { name = "Quiz App Team", email = "dev@quizapp.com" },
+]
+maintainers = [
+    { name = "Quiz App Team", email = "dev@quizapp.com" },
+]
+keywords = [
+    "quiz",
+    "fastapi",
+    "telegram",
+    "survey",
+    "python",
+    "async",
+    "webapp",
+    "pwa",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Framework :: FastAPI",
+    "Framework :: AsyncIO",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Education",
+    "Topic :: Communications :: Chat",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    # Web Framework
+    "fastapi==0.104.1",
+    "uvicorn[standard]==0.24.0",
+    "jinja2==3.1.2",
+    "python-multipart==0.0.6",
+
+    # Database
+    "sqlmodel==0.0.14",
+    "alembic==1.13.0",
+    "aiosqlite==0.19.0",
+    "sqlalchemy[asyncio]>=2.0.41",
+
+    # Validation & Security
+    "pydantic==2.5.0",
+    "pydantic-settings==2.1.0",
+    "python-jose[cryptography]==3.3.0",
+    "passlib[bcrypt]==1.7.4",
+
+    # HTTP & Telegram
+    "httpx==0.25.2",
+    "aiohttp==3.9.1",
+    "aiogram==3.2.0",
+    "slowapi==0.1.9",
+
+    # Push Notifications
+    "pywebpush==1.14.0",
+    "cryptography==41.0.7",
+    "ecdsa==0.18.0",
+
+    # PDF Generation
+    "weasyprint==60.2",
+    "reportlab==4.0.7",
+
+    # Email Validation
+    "email-validator==2.1.0",
+    "dnspython==2.4.2",
+
+    # Utilities
+    "python-dotenv==1.0.0",
+    "structlog==23.2.0",
+    "pillow==10.1.0",
+
+    # Redis & Caching
+    "aioredis==2.0.1",
+    "redis==5.0.1",
+
+    # Monitoring & Analytics
+    "psutil==5.9.6",
+    "prometheus-client==0.19.0",
+
+    # CORS and Additional
+    "fastapi-cors==0.0.6",
+]
+
+[project.optional-dependencies]
+# Development dependencies
+dev = [
+    # Testing
+    "pytest>=7.4.3",
+    "pytest-asyncio>=0.21.1",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "pytest-xdist>=3.5.0",
+    "pytest-timeout>=2.2.0",
+    "httpx>=0.25.2",
+
+    # Code quality
+    "black>=23.11.0",
+    "ruff>=0.1.6",
+    "mypy>=1.7.1",
+    "pre-commit>=3.6.0",
+
+    # Security
+    "bandit>=1.7.5",
+    "safety>=2.3.5",
+
+    # Documentation
+    "mkdocs>=1.5.3",
+    "mkdocs-material>=9.4.7",
+    "mkdocs-swagger-ui-tag>=0.6.6",
+
+    # Database for testing
+    "asyncpg>=0.29.0",
+    "psycopg2-binary>=2.9.9",
+
+    # Additional dev tools
+    "factory-boy>=3.3.0",
+    "faker>=20.1.0",
+    "freezegun>=1.2.2",
+    "responses>=0.24.1",
+]
+
+# Production dependencies (PostgreSQL)
+postgres = [
+    "asyncpg>=0.29.0",
+    "psycopg2-binary>=2.9.9",
+]
+
+# Performance testing
+performance = [
+    "locust>=2.17.0",
+    "memory-profiler>=0.61.0",
+    "py-spy>=0.3.14",
+]
+
+# All dependencies
+all = [
+    "quiz-app[dev,postgres,performance]",
+]
+
+[project.urls]
+Homepage = "https://github.com/mesteriis/quiz-app"
+Documentation = "https://github.com/mesteriis/quiz-app#readme"
+Repository = "https://github.com/mesteriis/quiz-app.git"
+Issues = "https://github.com/mesteriis/quiz-app/issues"
+Changelog = "https://github.com/mesteriis/quiz-app/blob/main/CHANGELOG.md"
+Funding = "https://github.com/sponsors/mesteriis"
+
+[project.scripts]
+quiz-app = "main:app"
+quiz-dev = "scripts.dev:main"
+quiz-test = "scripts.test:main"
+
+# UV specific configuration
+[tool.uv]
+dev-dependencies = [
+    # Testing framework
+    "pytest>=7.4.3",
+    "pytest-asyncio>=0.21.1",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "pytest-xdist>=3.5.0",
+    "pytest-timeout>=2.2.0",
+    "pytest-benchmark>=4.0.0",
+
+    # Code quality and formatting
+    "black>=23.11.0",
+    "ruff>=0.1.6",
+    "mypy>=1.7.1",
+    "pre-commit>=3.6.0",
+    "isort>=5.12.0",
+
+    # Security scanning
+    "bandit[toml]>=1.7.5",
+    "safety>=2.3.5",
+    "semgrep>=1.45.0",
+
+    # Type checking helpers
+    "types-redis>=4.6.0.11",
+    "types-pillow>=10.1.0.2",
+    "types-requests>=2.31.0.10",
+
+    # Testing utilities
+    "factory-boy>=3.3.0",
+    "faker>=20.1.0",
+    "freezegun>=1.2.2",
+    "responses>=0.24.1",
+    "httpx>=0.25.2",
+
+    # Database for testing
+    "asyncpg>=0.29.0",
+    "psycopg2-binary>=2.9.9",
+
+    # Documentation
+    "mkdocs>=1.5.3",
+    "mkdocs-material>=9.4.7",
+    "mkdocs-swagger-ui-tag>=0.6.6",
+
+    # Performance and profiling
+    "locust>=2.17.0",
+    "memory-profiler>=0.61.0",
+    "py-spy>=0.3.14",
+
+    # Development utilities
+    "ipython>=8.17.2",
+    "rich>=13.7.0",
+    "typer>=0.9.0",
+]
+
+# Black configuration
+[tool.black]
+line-length = 88
+target-version = ['py311', 'py312']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+  | migrations
+)/
+'''
+
+# Ruff configuration (replaces flake8, isort, and more)
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "ARG", # flake8-unused-arguments
+    "SIM", # flake8-simplify
+    "TCH", # flake8-type-checking
+    "TID", # flake8-tidy-imports
+    "Q",   # flake8-quotes
+    "FLY", # flynt
+    "PERF", # perflint
+    "RUF", # ruff-specific rules
+]
+ignore = [
+    "E501",  # line too long, handled by black
+    "B008",  # do not perform function calls in argument defaults
+    "C901",  # too complex
+    "W191",  # indentation contains tabs
+]
+unfixable = [
+    "F841", # unused variables
+]
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+    "migrations",
+]
+
+[tool.ruff.mccabe]
+max-complexity = 10
+
+[tool.ruff.isort]
+known-first-party = ["backend", "quiz_app"]
+force-sort-within-sections = true
+
+[tool.ruff.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+# MyPy configuration
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+show_column_numbers = true
+show_error_context = true
+
+# Per-module options
+[[tool.mypy.overrides]]
+module = [
+    "aiogram.*",
+    "aioredis.*",
+    "weasyprint.*",
+    "reportlab.*",
+    "pywebpush.*",
+]
+ignore_missing_imports = true
+
+# Pytest configuration
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--cov=backend",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-report=xml",
+    "--cov-fail-under=80",
+    "--asyncio-mode=auto",
+    "-ra",
+    "--tb=short",
+]
+testpaths = ["tests"]
+pythonpath = [".", "backend"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "asyncio: mark test as async",
+    "slow: mark test as slow",
+    "integration: mark test as integration test",
+    "e2e: mark test as end-to-end test",
+    "unit: mark test as unit test",
+    "api: mark test as API test",
+    "auth: mark test as authentication test",
+    "database: mark test as database test",
+    "telegram: mark test as telegram test",
+    "redis: mark test as redis test",
+    "security: mark test as security test",
+]
+filterwarnings = [
+    "error",
+    "ignore::UserWarning",
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
+# Coverage configuration
+[tool.coverage.run]
+source = ["backend"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*",
+    "*/migrations/*",
+    "*/venv/*",
+    "*/.venv/*",
+    "*/env/*",
+    "*/build/*",
+    "*/dist/*",
+]
+branch = true
+parallel = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+    "TYPE_CHECKING",
+]
+show_missing = true
+precision = 2
+
+[tool.coverage.html]
+directory = "htmlcov"
+
+# Bandit security linting
+[tool.bandit]
+exclude_dirs = ["tests", "test_*", "*/test_*", "*/tests/*"]
+skips = ["B101", "B601"]
+
+# Pre-commit hooks configuration
+[[tool.pre-commit.repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"
+rev = "v4.5.0"
+hooks = [
+    { id = "trailing-whitespace" },
+    { id = "end-of-file-fixer" },
+    { id = "check-yaml" },
+    { id = "check-added-large-files" },
+    { id = "check-case-conflict" },
+    { id = "check-merge-conflict" },
+    { id = "debug-statements" },
+]
+
+[[tool.pre-commit.repos]]
+repo = "https://github.com/psf/black"
+rev = "23.11.0"
+hooks = [
+    { id = "black" }
+]
+
+[[tool.pre-commit.repos]]
+repo = "https://github.com/astral-sh/ruff-pre-commit"
+rev = "v0.1.6"
+hooks = [
+    { id = "ruff", args = ["--fix"] },
+    { id = "ruff-format" },
+]
+
+[[tool.pre-commit.repos]]
+repo = "https://github.com/pre-commit/mirrors-mypy"
+rev = "v1.7.1"
+hooks = [
+    { id = "mypy", additional_dependencies = ["types-all"] }
+]
+
+# Hatch build configuration
+[tool.hatch.build.targets.wheel]
+packages = ["backend"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/backend",
+    "/tests",
+    "/README.md",
+    "/LICENSE",
+    "/CHANGELOG.md",
+]
+exclude = [
+    "/.github",
+    "/docs",
+    "*.pyc",
+    "/__pycache__",
+]
+
+# Additional metadata for package managers
+[tool.setuptools_scm]
+write_to = "backend/_version.py"
