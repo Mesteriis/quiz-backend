@@ -5,20 +5,15 @@
 включая регистрацию, вход, Telegram аутентификацию и управление профилем.
 """
 
-import pytest
-import asyncio
-from httpx import AsyncClient
-from unittest.mock import AsyncMock, patch
-import json
-from datetime import datetime
+from pathlib import Path
 
 # Локальные импорты
 import sys
-from pathlib import Path
+
+import pytest
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from models.user import User
 from services.jwt_service import jwt_service
 
 

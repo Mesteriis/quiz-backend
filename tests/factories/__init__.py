@@ -5,19 +5,19 @@
 с использованием factory_boy и Faker для генерации реалистичных данных.
 """
 
-from .user_factory import UserFactory, AdminUserFactory
-from .survey_factory import SurveyFactory, PublicSurveyFactory, PrivateSurveyFactory
 from .question_factory import (
     QuestionFactory,
-    TextQuestionFactory,
     RatingQuestionFactory,
+    TextQuestionFactory,
 )
 from .response_factory import (
+    RatingResponseFactory,
     ResponseFactory,
     TextResponseFactory,
-    RatingResponseFactory,
 )
-from .user_data_factory import UserDataFactory, TelegramUserDataFactory
+from .survey_factory import PrivateSurveyFactory, PublicSurveyFactory, SurveyFactory
+from .user_data_factory import TelegramUserDataFactory, UserDataFactory
+from .user_factory import AdminUserFactory, UserFactory
 
 __all__ = [
     # User factories

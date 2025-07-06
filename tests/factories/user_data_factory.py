@@ -2,10 +2,11 @@
 Фабрики для создания тестовых данных пользователей.
 """
 
+from pathlib import Path
+import sys
+
 import factory
 from faker import Faker
-import sys
-from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 

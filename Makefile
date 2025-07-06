@@ -97,17 +97,17 @@ install-hooks: ## Install pre-commit hooks
 .PHONY: dev
 dev: ## 🚀 Start backend development server
 	@echo "$(BOLD)$(GREEN)$(ROCKET) Starting Quiz App backend server...$(RESET)"
-	$(UV) run uvicorn main:app --reload --host 0.0.0.0 --port $(BACKEND_PORT)
+	$(UV) run uvicorn src.main:app --reload --host 0.0.0.0 --port $(BACKEND_PORT)
 
 .PHONY: dev-prod
 dev-prod: ## Start backend in production mode
 	@echo "$(BOLD)$(GREEN)$(ROCKET) Starting Quiz App in production mode...$(RESET)"
-	$(UV) run uvicorn main:app --host 0.0.0.0 --port $(BACKEND_PORT) --workers 4
+	$(UV) run uvicorn src.main:app --host 0.0.0.0 --port $(BACKEND_PORT) --workers 4
 
 .PHONY: dev-debug
 dev-debug: ## Start backend with debug logging
 	@echo "$(BOLD)$(YELLOW)$(GEAR) Starting Quiz App with debug logging...$(RESET)"
-	DEBUG=true LOG_LEVEL=DEBUG $(UV) run uvicorn main:app --reload --host 0.0.0.0 --port $(BACKEND_PORT)
+	DEBUG=true LOG_LEVEL=DEBUG $(UV) run uvicorn src.main:app --reload --host 0.0.0.0 --port $(BACKEND_PORT)
 
 # ================================
 # 🧪 TESTING
@@ -136,7 +136,7 @@ test-e2e: ## Run e2e tests only
 .PHONY: test-cov
 test-cov: ## 🧪 Run tests with coverage
 	@echo "$(BOLD)$(BLUE)$(TEST) Running tests with coverage...$(RESET)"
-	$(UV) run pytest --cov=backend --cov-report=html --cov-report=term-missing
+	$(UV) run pytest --cov=src --cov-report=html --cov-report=term-missing
 	@echo "$(GREEN)$(CHECK) Coverage report: htmlcov/index.html$(RESET)"
 
 .PHONY: test-watch
@@ -397,7 +397,7 @@ notebook: ## Start Jupyter notebook
 .PHONY: profile
 profile: ## Profile application performance
 	@echo "$(BLUE)$(GEAR) Profiling application...$(RESET)"
-	$(UV) run py-spy top --pid $$(pgrep -f "uvicorn main:app")
+	$(UV) run py-spy top --pid $$(pgrep -f "uvicorn src.main:app")
 
 .PHONY: check-ports
 check-ports: ## Check if ports are available
@@ -424,7 +424,7 @@ ci-install: ## Install dependencies for CI
 
 .PHONY: ci-test
 ci-test: ## Run tests for CI
-	$(UV) run pytest --cov=backend --cov-report=xml --cov-report=term-missing
+	$(UV) run pytest --cov=src --cov-report=xml --cov-report=term-missing
 
 .PHONY: ci-lint
 ci-lint: ## Run linting for CI
@@ -444,7 +444,7 @@ ci-security: ## Run security checks for CI
 .PHONY: bot-start
 bot-start: ## Start Telegram bot in polling mode
 	@echo "$(BLUE)$(ROCKET) Starting Telegram bot...$(RESET)"
-	$(UV) run python telegram_bot_polling.py
+	$(UV) run python src/telegram_bot_polling.py
 
 .PHONY: bot-webhook
 bot-webhook: ## Set up Telegram bot webhook
@@ -479,4 +479,4 @@ restore-db: ## Restore database from backup
 .DEFAULT_GOAL := help
 
 # Make sure we display help if no target is specified
-all: help 
+all: help

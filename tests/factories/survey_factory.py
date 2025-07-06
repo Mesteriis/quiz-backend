@@ -5,14 +5,15 @@
 с использованием factory_boy и Faker.
 """
 
-import factory
-import uuid
-from faker import Faker
 from datetime import datetime, timedelta
+from pathlib import Path
 
 # Локальные импорты
 import sys
-from pathlib import Path
+import uuid
+
+import factory
+from faker import Faker
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 

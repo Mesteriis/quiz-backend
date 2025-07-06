@@ -29,4 +29,4 @@ aioresponses==0.7.5
 
 # Дополнительные утилиты
 coverage==7.3.2
-pre-commit==3.5.0 
+pre-commit==3.5.0

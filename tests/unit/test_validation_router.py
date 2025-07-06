@@ -5,14 +5,12 @@
 включая валидацию email адресов и телефонных номеров.
 """
 
-import pytest
-from httpx import AsyncClient
-from unittest.mock import AsyncMock, patch
-import json
+from pathlib import Path
 
 # Локальные импорты
 import sys
-from pathlib import Path
+
+import pytest
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 

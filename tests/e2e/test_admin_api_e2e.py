@@ -1,10 +1,9 @@
-import os
-import pytest
-import httpx
-import asyncio
-import uuid
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+import os
+from typing import Optional
+
+import httpx
+import pytest
 
 
 @pytest.fixture
@@ -30,7 +29,7 @@ class TestAdminApiClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.client.aclose()
 
-    def _headers(self, token: Optional[str] = None) -> Dict[str, str]:
+    def _headers(self, token: Optional[str] = None) -> dict[str, str]:
         """Получение заголовков с опциональной аутентификацией."""
         headers = {"Content-Type": "application/json"}
         if token:
@@ -58,13 +57,11 @@ async def test_admin_registration(admin_client):
         "email": email,
         "first_name": "Admin",
         "last_name": "User",
-        "display_name": "Admin Test User"
+        "display_name": "Admin Test User",
     }
 
     response = await admin_client.client.post(
-        "/api/auth/register",
-        json=admin_data,
-        headers=admin_client._headers()
+        "/api/auth/register", json=admin_data, headers=admin_client._headers()
     )
 
     assert response.status_code == 200
@@ -89,8 +86,7 @@ async def test_get_admin_dashboard(admin_client):
 
     # Этот тест может не пройти, если у пользователя нет прав администратора
     response = await admin_client.client.get(
-        "/api/admin/dashboard",
-        headers=admin_client._headers(admin_client.admin_token)
+        "/api/admin/dashboard", headers=admin_client._headers(admin_client.admin_token)
     )
 
     # Проверяем код состояния (может быть 403, если нет прав)
@@ -114,8 +110,7 @@ async def test_get_all_surveys(admin_client):
         await test_admin_registration(admin_client)
 
     response = await admin_client.client.get(
-        "/api/admin/surveys",
-        headers=admin_client._headers(admin_client.admin_token)
+        "/api/admin/surveys", headers=admin_client._headers(admin_client.admin_token)
     )
 
     # Проверяем код состояния (может быть 403, если нет прав)
@@ -153,22 +148,22 @@ async def test_create_survey(admin_client):
                 "question_type": "RATING_1_10",
                 "is_required": True,
                 "order": 1,
-                "options": {}
+                "options": {},
             },
             {
                 "question_text": "Any additional comments?",
                 "question_type": "TEXT",
                 "is_required": False,
                 "order": 2,
-                "options": {}
-            }
-        ]
+                "options": {},
+            },
+        ],
     }
 
     response = await admin_client.client.post(
         "/api/admin/surveys",
         json=survey_data,
-        headers=admin_client._headers(admin_client.admin_token)
+        headers=admin_client._headers(admin_client.admin_token),
     )
 
     # Проверяем код состояния (может быть 403, если нет прав)
@@ -199,13 +194,13 @@ async def test_update_survey(admin_client):
     update_data = {
         "title": f"Updated Survey {datetime.now().strftime('%H%M%S')}",
         "description": "Updated description by e2e tests",
-        "is_active": True
+        "is_active": True,
     }
 
     response = await admin_client.client.put(
         f"/api/admin/surveys/{admin_client.test_survey_id}",
         json=update_data,
-        headers=admin_client._headers(admin_client.admin_token)
+        headers=admin_client._headers(admin_client.admin_token),
     )
 
     # Проверяем код состояния (может быть 403, если нет прав)
@@ -233,7 +228,7 @@ async def test_get_survey_responses(admin_client):
 
     response = await admin_client.client.get(
         f"/api/admin/surveys/{admin_client.test_survey_id}/responses",
-        headers=admin_client._headers(admin_client.admin_token)
+        headers=admin_client._headers(admin_client.admin_token),
     )
 
     # Проверяем код состояния (может быть 403, если нет прав)
@@ -262,7 +257,7 @@ async def test_get_survey_analytics(admin_client):
 
     response = await admin_client.client.get(
         f"/api/admin/surveys/{admin_client.test_survey_id}/analytics",
-        headers=admin_client._headers(admin_client.admin_token)
+        headers=admin_client._headers(admin_client.admin_token),
     )
 
     # Проверяем код состояния (может быть 403, если нет прав)
@@ -287,8 +282,7 @@ async def test_get_all_users(admin_client):
         await test_admin_registration(admin_client)
 
     response = await admin_client.client.get(
-        "/api/admin/users",
-        headers=admin_client._headers(admin_client.admin_token)
+        "/api/admin/users", headers=admin_client._headers(admin_client.admin_token)
     )
 
     # Проверяем код состояния (может быть 403, если нет прав)
@@ -322,7 +316,7 @@ async def test_toggle_user_admin(admin_client):
     response = await admin_client.client.post(
         f"/api/admin/users/{admin_client.test_user_id}/admin",
         json={"is_admin": True},
-        headers=admin_client._headers(admin_client.admin_token)
+        headers=admin_client._headers(admin_client.admin_token),
     )
 
     # Проверяем код состояния (может быть 403, если нет прав)
@@ -349,7 +343,7 @@ async def test_system_health(admin_client):
 
     response = await admin_client.client.get(
         "/api/admin/system/health",
-        headers=admin_client._headers(admin_client.admin_token)
+        headers=admin_client._headers(admin_client.admin_token),
     )
 
     # Проверяем код состояния (может быть 403, если нет прав)

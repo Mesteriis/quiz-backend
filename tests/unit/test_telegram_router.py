@@ -5,21 +5,15 @@
 включая управление webhook, отправку уведомлений и статус бота.
 """
 
-import pytest
-import pytest_asyncio
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Dict, Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
-from models import User, Survey, Question, Response
-from factories.user_factory import UserFactory
+import pytest_asyncio
 
 
 class TestTelegramWebhook:
     """Тесты для управления webhook."""
 
-    @pytest_asyncio.async_test
+
     async def test_get_webhook_info_success(self, api_client, mock_telegram_service):
         """Тест успешного получения информации о webhook."""
         # Настраиваем mock для webhook info
@@ -49,7 +43,7 @@ class TestTelegramWebhook:
 
         mock_telegram_service.bot.get_webhook_info.assert_called_once()
 
-    @pytest_asyncio.async_test
+
     async def test_get_webhook_info_bot_not_initialized(
         self, api_client, mock_telegram_service
     ):
@@ -61,7 +55,7 @@ class TestTelegramWebhook:
         assert response.status_code == 503
         assert "not initialized" in response.json()["detail"].lower()
 
-    @pytest_asyncio.async_test
+
     async def test_get_webhook_info_service_error(
         self, api_client, mock_telegram_service
     ):
@@ -75,7 +69,7 @@ class TestTelegramWebhook:
         assert response.status_code == 500
         assert "internal server error" in response.json()["detail"].lower()
 
-    @pytest_asyncio.async_test
+
     async def test_set_webhook_success(self, api_client, mock_telegram_service):
         """Тест успешной установки webhook."""
         mock_telegram_service.bot.set_webhook.return_value = True
@@ -96,7 +90,7 @@ class TestTelegramWebhook:
             drop_pending_updates=True,
         )
 
-    @pytest_asyncio.async_test
+
     async def test_set_webhook_no_url(self, api_client, mock_telegram_service):
         """Тест установки webhook без URL."""
         webhook_data = {}
@@ -106,7 +100,7 @@ class TestTelegramWebhook:
         assert response.status_code == 400
         assert "required" in response.json()["detail"].lower()
 
-    @pytest_asyncio.async_test
+
     async def test_set_webhook_failure(self, api_client, mock_telegram_service):
         """Тест неуспешной установки webhook."""
         mock_telegram_service.bot.set_webhook.return_value = False
@@ -118,7 +112,7 @@ class TestTelegramWebhook:
         assert response.status_code == 500
         assert "failed to set" in response.json()["detail"].lower()
 
-    @pytest_asyncio.async_test
+
     async def test_delete_webhook_success(self, api_client, mock_telegram_service):
         """Тест успешного удаления webhook."""
         mock_telegram_service.bot.delete_webhook.return_value = True
@@ -135,7 +129,7 @@ class TestTelegramWebhook:
             drop_pending_updates=True
         )
 
-    @pytest_asyncio.async_test
+
     async def test_delete_webhook_failure(self, api_client, mock_telegram_service):
         """Тест неуспешного удаления webhook."""
         mock_telegram_service.bot.delete_webhook.return_value = False
@@ -149,7 +143,7 @@ class TestTelegramWebhook:
 class TestTelegramWebhookHandler:
     """Тесты для обработки webhook обновлений."""
 
-    @pytest_asyncio.async_test
+
     async def test_webhook_handler_success(
         self, api_client, mock_telegram_service, test_settings
     ):
@@ -183,7 +177,7 @@ class TestTelegramWebhookHandler:
         assert args[0] == mock_telegram_service.bot  # bot instance
         # args[1] - это Update object
 
-    @pytest_asyncio.async_test
+
     async def test_webhook_handler_invalid_token(
         self, api_client, mock_telegram_service
     ):
@@ -206,7 +200,7 @@ class TestTelegramWebhookHandler:
         assert response.status_code == 401
         assert "invalid" in response.json()["detail"].lower()
 
-    @pytest_asyncio.async_test
+
     async def test_webhook_handler_bot_not_initialized(
         self, api_client, mock_telegram_service, test_settings
     ):
@@ -232,7 +226,7 @@ class TestTelegramWebhookHandler:
         assert response.status_code == 503
         assert "not initialized" in response.json()["detail"].lower()
 
-    @pytest_asyncio.async_test
+
     async def test_webhook_handler_dispatcher_error(
         self, api_client, mock_telegram_service, test_settings
     ):
@@ -265,7 +259,7 @@ class TestTelegramWebhookHandler:
 class TestTelegramStatus:
     """Тесты для получения статуса бота."""
 
-    @pytest_asyncio.async_test
+
     async def test_get_bot_status_success(self, api_client, mock_telegram_service):
         """Тест успешного получения статуса бота."""
         # Настраиваем mock для bot info
@@ -311,7 +305,7 @@ class TestTelegramStatus:
         assert webhook_info["url"] == "https://example.com/webhook"
         assert webhook_info["pending_update_count"] == 0
 
-    @pytest_asyncio.async_test
+
     async def test_get_bot_status_not_initialized(
         self, api_client, mock_telegram_service
     ):
@@ -328,7 +322,7 @@ class TestTelegramStatus:
         assert data["bot_info"] is None
         assert data["webhook_info"] is None
 
-    @pytest_asyncio.async_test
+
     async def test_get_bot_status_service_error(
         self, api_client, mock_telegram_service
     ):
@@ -344,7 +338,7 @@ class TestTelegramStatus:
 class TestTelegramNotifications:
     """Тесты для отправки уведомлений через Telegram."""
 
-    @pytest_asyncio.async_test
+
     async def test_send_notification_success(self, api_client, mock_telegram_service):
         """Тест успешной отправки уведомления."""
         mock_telegram_service.send_notification = AsyncMock(return_value=True)
@@ -369,7 +363,7 @@ class TestTelegramNotifications:
             user_id=123456789, message="Test notification", parse_mode="HTML"
         )
 
-    @pytest_asyncio.async_test
+
     async def test_send_notification_missing_data(
         self, api_client, mock_telegram_service
     ):
@@ -386,7 +380,7 @@ class TestTelegramNotifications:
         assert response.status_code == 400
         assert "required" in response.json()["detail"].lower()
 
-    @pytest_asyncio.async_test
+
     async def test_send_notification_failure(self, api_client, mock_telegram_service):
         """Тест неуспешной отправки уведомления."""
         mock_telegram_service.send_notification = AsyncMock(return_value=False)
@@ -400,7 +394,7 @@ class TestTelegramNotifications:
         assert response.status_code == 500
         assert "failed to send" in response.json()["detail"].lower()
 
-    @pytest_asyncio.async_test
+
     async def test_send_admin_notification_success(
         self, api_client, mock_telegram_service, admin_headers
     ):
@@ -425,7 +419,7 @@ class TestTelegramNotifications:
             message="Admin notification", alert_type="critical"
         )
 
-    @pytest_asyncio.async_test
+
     async def test_send_admin_notification_requires_admin(
         self, api_client, auth_headers, regular_user
     ):
@@ -443,7 +437,7 @@ class TestTelegramNotifications:
         assert response.status_code == 403
         assert "admin" in response.json()["detail"].lower()
 
-    @pytest_asyncio.async_test
+
     async def test_send_admin_notification_requires_auth(self, api_client):
         """Тест что отправка админ уведомлений требует авторизацию."""
         notification_data = {"message": "Admin notification"}
@@ -458,7 +452,7 @@ class TestTelegramNotifications:
 class TestTelegramSecurity:
     """Тесты для безопасности Telegram интеграции."""
 
-    @pytest_asyncio.async_test
+
     async def test_get_security_stats(self, api_client):
         """Тест получения статистики безопасности."""
         response = await api_client.get("/api/telegram/security/stats")
@@ -479,7 +473,7 @@ class TestTelegramSecurity:
         assert isinstance(data["rate_limiting"], str)
         assert isinstance(data["ip_whitelisting"], str)
 
-    @pytest_asyncio.async_test
+
     async def test_health_check(self, api_client):
         """Тест проверки здоровья Telegram сервиса."""
         response = await api_client.get("/api/telegram/health")
@@ -500,7 +494,7 @@ class TestTelegramSecurity:
 class TestTelegramIntegration:
     """Интеграционные тесты для Telegram функций."""
 
-    @pytest_asyncio.async_test
+
     async def test_complete_webhook_management_flow(
         self, api_client, mock_telegram_service
     ):
@@ -542,7 +536,7 @@ class TestTelegramIntegration:
         assert response.status_code == 200
         assert response.json()["url"] == ""
 
-    @pytest_asyncio.async_test
+
     async def test_bot_status_and_notifications_flow(
         self, api_client, mock_telegram_service, admin_headers
     ):

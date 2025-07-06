@@ -5,22 +5,17 @@
 включая CRUD операции, публичные/приватные опросы и пагинацию.
 """
 
-import pytest
-import asyncio
-from httpx import AsyncClient
-from unittest.mock import AsyncMock, patch
-import json
-import uuid
-from datetime import datetime
+from pathlib import Path
 
 # Локальные импорты
 import sys
-from pathlib import Path
+import uuid
+
+import pytest
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from models.survey import Survey
-from models.question import Question
 
 
 class TestGetActiveSurveys:

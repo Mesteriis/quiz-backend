@@ -1,9 +1,13 @@
 from fastapi import status
 
+
 async def test_health_check(client):
     response = await client.get("/health")
+    data = response.json()
+    print(data)
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["status"] == "healthy"
+
 
 async def test_root_endpoint(client):
     response = await client.get("/")

@@ -5,23 +5,18 @@
 включая управление опросами, пользователями и системной аналитикой.
 """
 
-import pytest
 import pytest_asyncio
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Dict, Any
 
-from models import User, Survey, Question, Response, UserData
-from tests.factories.survey_factory import SurveyFactory
-from tests.factories.user_factory import UserFactory
 from tests.factories.question_factory import QuestionFactory
 from tests.factories.response_factory import ResponseFactory
+from tests.factories.survey_factory import SurveyFactory
+from tests.factories.user_factory import UserFactory
 
 
 class TestAdminDashboard:
     """Тесты для админ дашборда."""
 
-    @pytest_asyncio.async_test
+
     async def test_get_dashboard_success(self, api_client, admin_headers, db_session):
         """Тест успешного получения дашборда."""
         # Создаем тестовые данные
@@ -68,7 +63,7 @@ class TestAdminDashboard:
             assert "is_public" in survey
             assert "created_at" in survey
 
-    @pytest_asyncio.async_test
+
     async def test_get_dashboard_requires_admin(
         self, api_client, auth_headers, regular_user
     ):
@@ -80,7 +75,7 @@ class TestAdminDashboard:
         assert response.status_code == 403
         assert "admin" in response.json()["detail"].lower()
 
-    @pytest_asyncio.async_test
+
     async def test_get_dashboard_requires_auth(self, api_client):
         """Тест что дашборд требует авторизацию."""
         response = await api_client.get("/api/admin/dashboard")
@@ -91,7 +86,7 @@ class TestAdminDashboard:
 class TestAdminSurveys:
     """Тесты для управления опросами."""
 
-    @pytest_asyncio.async_test
+
     async def test_get_all_surveys_success(self, api_client, admin_headers, db_session):
         """Тест успешного получения всех опросов."""
         survey_factory = SurveyFactory(db_session)
@@ -116,7 +111,7 @@ class TestAdminSurveys:
         assert len(public_surveys) >= 1
         assert len(private_surveys) >= 1
 
-    @pytest_asyncio.async_test
+
     async def test_get_all_surveys_exclude_private(
         self, api_client, admin_headers, db_session
     ):
@@ -137,7 +132,7 @@ class TestAdminSurveys:
         for survey in surveys:
             assert survey["is_public"] is True
 
-    @pytest_asyncio.async_test
+
     async def test_get_all_surveys_pagination(
         self, api_client, admin_headers, db_session
     ):
@@ -165,7 +160,7 @@ class TestAdminSurveys:
         surveys = response.json()
         assert len(surveys) == 2
 
-    @pytest_asyncio.async_test
+
     async def test_create_survey_success(self, api_client, admin_headers, db_session):
         """Тест успешного создания опроса."""
         survey_data = {
@@ -189,7 +184,7 @@ class TestAdminSurveys:
         assert "id" in created_survey
         assert "created_at" in created_survey
 
-    @pytest_asyncio.async_test
+
     async def test_update_survey_success(self, api_client, admin_headers, db_session):
         """Тест успешного обновления опроса."""
         survey_factory = SurveyFactory(db_session)
@@ -213,7 +208,7 @@ class TestAdminSurveys:
         assert updated_survey["is_active"] == update_data["is_active"]
         assert updated_survey["id"] == survey.id
 
-    @pytest_asyncio.async_test
+
     async def test_update_survey_not_found(self, api_client, admin_headers):
         """Тест обновления несуществующего опроса."""
         update_data = {"title": "Updated Title"}
@@ -225,7 +220,7 @@ class TestAdminSurveys:
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
 
-    @pytest_asyncio.async_test
+
     async def test_delete_survey_success(self, api_client, admin_headers, db_session):
         """Тест успешного удаления опроса."""
         survey_factory = SurveyFactory(db_session)
@@ -246,7 +241,7 @@ class TestAdminSurveys:
         )
         # Должен быть 404 или опрос не должен появиться в списке
 
-    @pytest_asyncio.async_test
+
     async def test_delete_survey_not_found(self, api_client, admin_headers):
         """Тест удаления несуществующего опроса."""
         response = await api_client.auth_delete(
@@ -260,7 +255,7 @@ class TestAdminSurveys:
 class TestAdminSurveyResponses:
     """Тесты для управления ответами на опросы."""
 
-    @pytest_asyncio.async_test
+
     async def test_get_survey_responses_success(
         self, api_client, admin_headers, db_session
     ):
@@ -306,7 +301,7 @@ class TestAdminSurveyResponses:
             assert "response_data" in resp
             assert "created_at" in resp
 
-    @pytest_asyncio.async_test
+
     async def test_get_survey_responses_empty(
         self, api_client, admin_headers, db_session
     ):
@@ -322,7 +317,7 @@ class TestAdminSurveyResponses:
         responses = response.json()
         assert len(responses) == 0
 
-    @pytest_asyncio.async_test
+
     async def test_get_survey_responses_not_found(self, api_client, admin_headers):
         """Тест получения ответов для несуществующего опроса."""
         response = await api_client.auth_get(
@@ -336,7 +331,7 @@ class TestAdminSurveyResponses:
 class TestAdminSurveyAnalytics:
     """Тесты для аналитики опросов."""
 
-    @pytest_asyncio.async_test
+
     async def test_get_survey_analytics_success(
         self, api_client, admin_headers, db_session
     ):
@@ -389,7 +384,7 @@ class TestAdminSurveyAnalytics:
         assert analytics["unique_users"] >= 2
         assert len(analytics["questions_analytics"]) >= 2
 
-    @pytest_asyncio.async_test
+
     async def test_get_survey_analytics_empty(
         self, api_client, admin_headers, db_session
     ):
@@ -408,7 +403,7 @@ class TestAdminSurveyAnalytics:
         assert analytics["unique_users"] == 0
         assert len(analytics["questions_analytics"]) == 0
 
-    @pytest_asyncio.async_test
+
     async def test_get_survey_analytics_not_found(self, api_client, admin_headers):
         """Тест аналитики для несуществующего опроса."""
         response = await api_client.auth_get(
@@ -422,7 +417,7 @@ class TestAdminSurveyAnalytics:
 class TestAdminUsers:
     """Тесты для управления пользователями."""
 
-    @pytest_asyncio.async_test
+
     async def test_get_all_users_success(self, api_client, admin_headers, db_session):
         """Тест получения всех пользователей."""
         user_factory = UserFactory(db_session)
@@ -446,7 +441,7 @@ class TestAdminUsers:
             assert "is_active" in user
             assert "created_at" in user
 
-    @pytest_asyncio.async_test
+
     async def test_get_all_users_pagination(
         self, api_client, admin_headers, db_session
     ):
@@ -474,7 +469,7 @@ class TestAdminUsers:
         users = response.json()
         assert len(users) == 2
 
-    @pytest_asyncio.async_test
+
     async def test_get_all_users_search(self, api_client, admin_headers, db_session):
         """Тест поиска пользователей."""
         user_factory = UserFactory(db_session)
@@ -495,7 +490,7 @@ class TestAdminUsers:
         john_users = [u for u in users if "john" in u["username"].lower()]
         assert len(john_users) >= 1
 
-    @pytest_asyncio.async_test
+
     async def test_toggle_user_admin_success(
         self, api_client, admin_headers, db_session
     ):
@@ -526,7 +521,7 @@ class TestAdminUsers:
         result = response.json()
         assert result["success"] is True
 
-    @pytest_asyncio.async_test
+
     async def test_toggle_user_admin_not_found(self, api_client, admin_headers):
         """Тест изменения админ статуса несуществующего пользователя."""
         response = await api_client.auth_put(
@@ -538,7 +533,7 @@ class TestAdminUsers:
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
 
-    @pytest_asyncio.async_test
+
     async def test_delete_user_success(self, api_client, admin_headers, db_session):
         """Тест удаления пользователя."""
         user_factory = UserFactory(db_session)
@@ -559,7 +554,7 @@ class TestAdminUsers:
         )
         # Пользователь не должен находиться в списке
 
-    @pytest_asyncio.async_test
+
     async def test_delete_user_not_found(self, api_client, admin_headers):
         """Тест удаления несуществующего пользователя."""
         response = await api_client.auth_delete(
@@ -573,7 +568,7 @@ class TestAdminUsers:
 class TestAdminSystem:
     """Тесты для системных функций."""
 
-    @pytest_asyncio.async_test
+
     async def test_system_health_success(self, api_client, admin_headers, db_session):
         """Тест проверки здоровья системы."""
         response = await api_client.auth_get(
@@ -592,7 +587,7 @@ class TestAdminSystem:
         assert health["status"] in ["healthy", "ok", "operational"]
         assert health["database"] in ["connected", "ok", "operational"]
 
-    @pytest_asyncio.async_test
+
     async def test_system_health_requires_admin(
         self, api_client, auth_headers, regular_user
     ):
@@ -610,7 +605,7 @@ class TestAdminSystem:
 class TestAdminPermissions:
     """Тесты для проверки прав доступа."""
 
-    @pytest_asyncio.async_test
+
     async def test_all_endpoints_require_admin(
         self, api_client, auth_headers, regular_user
     ):
@@ -628,12 +623,12 @@ class TestAdminPermissions:
         for endpoint in admin_endpoints:
             response = await api_client.auth_get(endpoint, headers=headers)
 
-            assert response.status_code == 403, (
-                f"Endpoint {endpoint} should require admin"
-            )
+            assert (
+                response.status_code == 403
+            ), f"Endpoint {endpoint} should require admin"
             assert "admin" in response.json()["detail"].lower()
 
-    @pytest_asyncio.async_test
+
     async def test_all_endpoints_require_auth(self, api_client):
         """Тест что все админ эндпоинты требуют авторизацию."""
         # Список всех админ эндпоинтов
@@ -647,15 +642,15 @@ class TestAdminPermissions:
         for endpoint in admin_endpoints:
             response = await api_client.get(endpoint)
 
-            assert response.status_code == 401, (
-                f"Endpoint {endpoint} should require auth"
-            )
+            assert (
+                response.status_code == 401
+            ), f"Endpoint {endpoint} should require auth"
 
 
 class TestAdminIntegration:
     """Интеграционные тесты для админ функций."""
 
-    @pytest_asyncio.async_test
+
     async def test_full_survey_management_flow(
         self, api_client, admin_headers, db_session
     ):
@@ -703,7 +698,7 @@ class TestAdminIntegration:
         assert response.status_code == 200
         assert response.json()["success"] is True
 
-    @pytest_asyncio.async_test
+
     async def test_full_user_management_flow(
         self, api_client, admin_headers, db_session
     ):

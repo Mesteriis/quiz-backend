@@ -5,23 +5,19 @@
 включая создание ответов, получение ответов и валидацию данных.
 """
 
-import pytest
 import asyncio
-from httpx import AsyncClient
-from unittest.mock import AsyncMock, patch
-import json
-from datetime import datetime
+from pathlib import Path
 
 # Локальные импорты
 import sys
-from pathlib import Path
+
+import pytest
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from models.response import Response
 from models.question import Question, QuestionType
+from models.response import Response
 from models.survey import Survey
-from models.user import User
 
 
 class TestCreateResponse:

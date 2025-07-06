@@ -50,4 +50,4 @@ indent_size = 2
 indent_size = 4
 
 [*.{dockerfile,Dockerfile}]
-indent_size = 4 
+indent_size = 4

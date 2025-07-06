@@ -5,24 +5,18 @@
 для опросов и пользователей.
 """
 
-import pytest
-import pytest_asyncio
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Dict, Any
-from unittest.mock import AsyncMock
 
-from models import User, Survey, Question, Response, UserData
-from factories.survey_factory import SurveyFactory
-from factories.user_factory import UserFactory
-from factories.question_factory import QuestionFactory
-from factories.response_factory import ResponseFactory
+from tests.factories.question_factory import QuestionFactory
+from tests.factories.response_factory import ResponseFactory
+from tests.factories.survey_factory import SurveyFactory
+from tests.factories.user_factory import UserFactory
+import pytest_asyncio
 
 
 class TestSurveyPdfReports:
     """Тесты для генерации PDF отчетов по опросам."""
 
-    @pytest_asyncio.async_test
+
     async def test_generate_survey_pdf_success(
         self, api_client, admin_headers, db_session, mock_pdf_service
     ):
@@ -82,7 +76,7 @@ class TestSurveyPdfReports:
         assert "total_responses" in analytics_data
         assert "completion_rate" in analytics_data
 
-    @pytest_asyncio.async_test
+
     async def test_generate_survey_pdf_empty_survey(
         self, api_client, admin_headers, db_session, mock_pdf_service
     ):
@@ -108,7 +102,7 @@ class TestSurveyPdfReports:
         assert analytics_data["total_responses"] == 0
         assert analytics_data["completion_rate"] == 0
 
-    @pytest_asyncio.async_test
+
     async def test_generate_survey_pdf_not_found(self, api_client, admin_headers):
         """Тест генерации PDF для несуществующего опроса."""
         response = await api_client.auth_get(
@@ -118,7 +112,7 @@ class TestSurveyPdfReports:
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
 
-    @pytest_asyncio.async_test
+
     async def test_generate_survey_pdf_requires_admin(
         self, api_client, auth_headers, regular_user, db_session
     ):
@@ -135,7 +129,7 @@ class TestSurveyPdfReports:
         assert response.status_code == 403
         assert "admin" in response.json()["detail"].lower()
 
-    @pytest_asyncio.async_test
+
     async def test_generate_survey_pdf_requires_auth(self, api_client, db_session):
         """Тест что генерация PDF опроса требует авторизацию."""
         survey_factory = SurveyFactory(db_session)
@@ -145,7 +139,7 @@ class TestSurveyPdfReports:
 
         assert response.status_code == 401
 
-    @pytest_asyncio.async_test
+
     async def test_generate_survey_pdf_service_error(
         self, api_client, admin_headers, db_session, mock_pdf_service
     ):
@@ -169,7 +163,7 @@ class TestSurveyPdfReports:
 class TestUserPdfReports:
     """Тесты для генерации PDF отчетов пользователей."""
 
-    @pytest_asyncio.async_test
+
     async def test_generate_user_pdf_success_own_report(
         self, api_client, auth_headers, db_session, mock_pdf_service
     ):
@@ -208,7 +202,7 @@ class TestUserPdfReports:
         # Проверяем что PDF сервис был вызван
         mock_pdf_service.generate_user_report.assert_called_once()
 
-    @pytest_asyncio.async_test
+
     async def test_generate_user_pdf_admin_access(
         self, api_client, admin_headers, db_session, mock_pdf_service
     ):
@@ -227,7 +221,7 @@ class TestUserPdfReports:
         assert response.status_code == 200
         assert response.content == mock_pdf_bytes
 
-    @pytest_asyncio.async_test
+
     async def test_generate_user_pdf_forbidden_other_user(
         self, api_client, auth_headers, db_session
     ):
@@ -245,7 +239,7 @@ class TestUserPdfReports:
         assert response.status_code == 403
         assert "own responses" in response.json()["detail"].lower()
 
-    @pytest_asyncio.async_test
+
     async def test_generate_user_pdf_not_found(self, api_client, admin_headers):
         """Тест генерации PDF для несуществующего пользователя."""
         response = await api_client.auth_get(
@@ -255,7 +249,7 @@ class TestUserPdfReports:
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
 
-    @pytest_asyncio.async_test
+
     async def test_generate_user_pdf_requires_auth(self, api_client, db_session):
         """Тест что генерация PDF пользователя требует авторизацию."""
         user_factory = UserFactory(db_session)
@@ -265,7 +259,7 @@ class TestUserPdfReports:
 
         assert response.status_code == 401
 
-    @pytest_asyncio.async_test
+
     async def test_generate_user_pdf_empty_responses(
         self, api_client, auth_headers, db_session, mock_pdf_service
     ):
@@ -294,7 +288,7 @@ class TestUserPdfReports:
 class TestMyResponsesPdfReports:
     """Тесты для генерации PDF отчетов собственных ответов."""
 
-    @pytest_asyncio.async_test
+
     async def test_generate_my_responses_pdf_success(
         self, api_client, auth_headers, db_session, mock_pdf_service
     ):
@@ -327,7 +321,7 @@ class TestMyResponsesPdfReports:
         assert response.status_code == 200
         assert response.headers["content-type"] == "application/pdf"
         assert "attachment" in response.headers["content-disposition"]
-        assert f"my_responses_report.pdf" in response.headers["content-disposition"]
+        assert "my_responses_report.pdf" in response.headers["content-disposition"]
         assert response.content == mock_pdf_bytes
 
         # Проверяем что PDF сервис был вызван
@@ -343,7 +337,7 @@ class TestMyResponsesPdfReports:
         assert len(responses_data) >= 1
         assert responses_data[0]["user"]["id"] == user.id
 
-    @pytest_asyncio.async_test
+
     async def test_generate_my_responses_pdf_empty(
         self, api_client, auth_headers, db_session, mock_pdf_service
     ):
@@ -368,14 +362,14 @@ class TestMyResponsesPdfReports:
         responses_data = args[1]
         assert len(responses_data) == 0
 
-    @pytest_asyncio.async_test
+
     async def test_generate_my_responses_pdf_requires_auth(self, api_client):
         """Тест что генерация PDF собственных ответов требует авторизацию."""
         response = await api_client.get("/api/reports/my-responses/pdf")
 
         assert response.status_code == 401
 
-    @pytest_asyncio.async_test
+
     async def test_generate_my_responses_pdf_service_error(
         self, api_client, auth_headers, db_session, mock_pdf_service
     ):
@@ -401,7 +395,7 @@ class TestMyResponsesPdfReports:
 class TestReportsIntegration:
     """Интеграционные тесты для отчетов."""
 
-    @pytest_asyncio.async_test
+
     async def test_complete_survey_report_flow(
         self, api_client, admin_headers, db_session, mock_pdf_service
     ):
@@ -489,7 +483,7 @@ class TestReportsIntegration:
         assert analytics_data["total_questions"] == 3
         assert analytics_data["completion_rate"] == 33.33  # 1 из 3 завершил полностью
 
-    @pytest_asyncio.async_test
+
     async def test_complete_user_report_flow(
         self, api_client, auth_headers, db_session, mock_pdf_service
     ):

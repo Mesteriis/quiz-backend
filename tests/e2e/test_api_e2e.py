@@ -1,10 +1,10 @@
-import os
-import pytest
-import httpx
-import asyncio
-import uuid
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+import os
+from typing import Optional
+import uuid
+
+import httpx
+import pytest
 
 
 @pytest.fixture
@@ -24,7 +24,7 @@ class TestApiClient:
         self.test_user_id: Optional[int] = None
         self.test_admin_id: Optional[int] = None
         self.test_survey_id: Optional[int] = None
-        self.test_question_ids: List[int] = []
+        self.test_question_ids: list[int] = []
         self.user_session_id: str = str(uuid.uuid4())
 
     async def __aenter__(self):
@@ -33,7 +33,7 @@ class TestApiClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.client.aclose()
 
-    def _headers(self, token: Optional[str] = None) -> Dict[str, str]:
+    def _headers(self, token: Optional[str] = None) -> dict[str, str]:
         """Получение заголовков с опциональной аутентификацией."""
         headers = {"Content-Type": "application/json"}
         if token:
@@ -69,13 +69,11 @@ async def test_user_registration_and_login(api_client):
         "email": email,
         "first_name": "Test",
         "last_name": "User",
-        "display_name": "Test User"
+        "display_name": "Test User",
     }
 
     response = await api_client.client.post(
-        "/api/auth/register",
-        json=user_data,
-        headers=api_client._headers()
+        "/api/auth/register", json=user_data, headers=api_client._headers()
     )
 
     assert response.status_code == 200
@@ -90,9 +88,7 @@ async def test_user_registration_and_login(api_client):
     # Проверка входа
     login_data = {"identifier": username}
     response = await api_client.client.post(
-        "/api/auth/login",
-        json=login_data,
-        headers=api_client._headers()
+        "/api/auth/login", json=login_data, headers=api_client._headers()
     )
 
     assert response.status_code == 200
@@ -109,13 +105,11 @@ async def test_telegram_auth(api_client):
         "telegram_id": telegram_id,
         "telegram_username": f"testuser_tg_{telegram_id}",
         "telegram_first_name": "Telegram",
-        "telegram_last_name": "User"
+        "telegram_last_name": "User",
     }
 
     response = await api_client.client.post(
-        "/api/auth/telegram",
-        json=telegram_data,
-        headers=api_client._headers()
+        "/api/auth/telegram", json=telegram_data, headers=api_client._headers()
     )
 
     assert response.status_code == 200
@@ -134,8 +128,7 @@ async def test_user_profile(api_client):
 
     # Получение профиля
     response = await api_client.client.get(
-        "/api/auth/me",
-        headers=api_client._headers(api_client.auth_token)
+        "/api/auth/me", headers=api_client._headers(api_client.auth_token)
     )
 
     assert response.status_code == 200
@@ -145,15 +138,12 @@ async def test_user_profile(api_client):
     assert profile["id"] == api_client.test_user_id
 
     # Обновление профиля
-    update_data = {
-        "bio": "Test bio for e2e testing",
-        "language": "ru"
-    }
+    update_data = {"bio": "Test bio for e2e testing", "language": "ru"}
 
     response = await api_client.client.put(
         "/api/auth/me",
         json=update_data,
-        headers=api_client._headers(api_client.auth_token)
+        headers=api_client._headers(api_client.auth_token),
     )
 
     assert response.status_code == 200
@@ -165,16 +155,10 @@ async def test_user_profile(api_client):
 @pytest.mark.asyncio
 async def test_email_validation(api_client):
     """Тест валидации email адреса."""
-    email_data = {
-        "email": "test@gmail.com",
-        "check_mx": True,
-        "check_smtp": False
-    }
+    email_data = {"email": "test@gmail.com", "check_mx": True, "check_smtp": False}
 
     response = await api_client.client.post(
-        "/api/validation/email",
-        json=email_data,
-        headers=api_client._headers()
+        "/api/validation/email", json=email_data, headers=api_client._headers()
     )
 
     assert response.status_code == 200
@@ -193,9 +177,7 @@ async def test_token_verification(api_client):
     verify_data = {"token": api_client.auth_token}
 
     response = await api_client.client.post(
-        "/api/auth/verify-token",
-        json=verify_data,
-        headers=api_client._headers()
+        "/api/auth/verify-token", json=verify_data, headers=api_client._headers()
     )
 
     assert response.status_code == 200
@@ -209,8 +191,7 @@ async def test_token_verification(api_client):
 async def test_active_surveys(api_client):
     """Тест получения активных публичных опросов."""
     response = await api_client.client.get(
-        "/api/surveys/active",
-        headers=api_client._headers()
+        "/api/surveys/active", headers=api_client._headers()
     )
 
     assert response.status_code == 200
@@ -234,8 +215,7 @@ async def test_get_survey_by_id(api_client):
         pytest.skip("No active surveys available")
 
     response = await api_client.client.get(
-        f"/api/surveys/{api_client.test_survey_id}",
-        headers=api_client._headers()
+        f"/api/surveys/{api_client.test_survey_id}", headers=api_client._headers()
     )
 
     assert response.status_code == 200
@@ -262,7 +242,7 @@ async def test_get_survey_questions(api_client):
 
     response = await api_client.client.get(
         f"/api/surveys/{api_client.test_survey_id}/questions",
-        headers=api_client._headers()
+        headers=api_client._headers(),
     )
 
     assert response.status_code == 200
@@ -289,13 +269,11 @@ async def test_create_response(api_client):
     response_data = {
         "question_id": question_id,
         "user_session_id": api_client.user_session_id,
-        "answer": {"value": "Тестовый ответ e2e"}
+        "answer": {"value": "Тестовый ответ e2e"},
     }
 
     response = await api_client.client.post(
-        "/api/responses/",
-        json=response_data,
-        headers=api_client._headers()
+        "/api/responses/", json=response_data, headers=api_client._headers()
     )
 
     assert response.status_code in [200, 201, 400]  # 400 если уже есть ответ
@@ -322,7 +300,7 @@ async def test_get_survey_progress(api_client):
 
     response = await api_client.client.get(
         f"/api/responses/survey/{api_client.test_survey_id}/progress/{api_client.user_session_id}",
-        headers=api_client._headers()
+        headers=api_client._headers(),
     )
 
     assert response.status_code == 200
@@ -343,24 +321,14 @@ async def test_user_data_collection(api_client):
         "user_agent": "E2E Test Agent",
         "browser_fingerprint": {
             "canvas": "test_canvas_hash",
-            "webgl": "test_webgl_hash"
+            "webgl": "test_webgl_hash",
         },
-        "device_info": {
-            "screen_width": 1920,
-            "screen_height": 1080,
-            "timezone": "UTC"
-        },
-        "location_data": {
-            "latitude": 55.7558,
-            "longitude": 37.6176,
-            "accuracy": 100
-        }
+        "device_info": {"screen_width": 1920, "screen_height": 1080, "timezone": "UTC"},
+        "location_data": {"latitude": 55.7558, "longitude": 37.6176, "accuracy": 100},
     }
 
     response = await api_client.client.post(
-        "/api/user-data/session",
-        json=user_data,
-        headers=api_client._headers()
+        "/api/user-data/session", json=user_data, headers=api_client._headers()
     )
 
     assert response.status_code in [200, 201, 400]  # 400 если сессия уже существует
@@ -375,8 +343,7 @@ async def test_user_data_collection(api_client):
 async def test_telegram_webhook_health(api_client):
     """Тест проверки работоспособности Telegram webhook."""
     response = await api_client.client.get(
-        "/api/telegram/health",
-        headers=api_client._headers()
+        "/api/telegram/health", headers=api_client._headers()
     )
 
     assert response.status_code == 200
@@ -389,8 +356,7 @@ async def test_telegram_webhook_health(api_client):
 async def test_telegram_bot_status(api_client):
     """Тест получения статуса Telegram бота."""
     response = await api_client.client.get(
-        "/api/telegram/status",
-        headers=api_client._headers()
+        "/api/telegram/status", headers=api_client._headers()
     )
 
     assert response.status_code == 200
@@ -408,8 +374,7 @@ async def _check_response_exists(api_client) -> bool:
 
     try:
         response = await api_client.client.get(
-            f"/api/responses/question/{question_id}",
-            headers=api_client._headers()
+            f"/api/responses/question/{question_id}", headers=api_client._headers()
         )
 
         if response.status_code == 200:

@@ -5,19 +5,14 @@
 включая сбор данных пользователей, fingerprinting и геолокацию.
 """
 
-import pytest
-from httpx import AsyncClient
-from unittest.mock import AsyncMock, patch
-import json
-from datetime import datetime
+from pathlib import Path
 
 # Локальные импорты
 import sys
-from pathlib import Path
+
+import pytest
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-
-from models.user_data import UserData
 
 
 class TestCreateUserData:

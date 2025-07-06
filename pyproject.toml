@@ -162,7 +162,7 @@ Changelog = "https://github.com/mesteriis/quiz-app/blob/main/CHANGELOG.md"
 Funding = "https://github.com/sponsors/mesteriis"
 
 [project.scripts]
-quiz-app = "main:app"
+quiz-app = "src.main:app"
 quiz-dev = "scripts.dev:main"
 quiz-test = "scripts.test:main"
 
@@ -303,7 +303,7 @@ exclude = [
 max-complexity = 10
 
 [tool.ruff.isort]
-known-first-party = ["backend", "quiz_app"]
+known-first-party = ["src", "quiz_app"]
 force-sort-within-sections = true
 
 [tool.ruff.flake8-tidy-imports]
@@ -345,7 +345,7 @@ minversion = "7.0"
 addopts = [
     "--strict-markers",
     "--strict-config",
-    "--cov=backend",
+    "--cov=src",
     "--cov-report=term-missing",
     "--cov-report=html",
     "--cov-report=xml",
@@ -355,7 +355,7 @@ addopts = [
     "--tb=short",
 ]
 testpaths = ["tests"]
-pythonpath = [".", "backend"]
+pythonpath = ["src"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
@@ -381,7 +381,7 @@ filterwarnings = [
 
 # Coverage configuration
 [tool.coverage.run]
-source = ["backend"]
+source = ["src"]
 omit = [
     "*/tests/*",
     "*/test_*",
@@ -459,11 +459,11 @@ hooks = [
 
 # Hatch build configuration
 [tool.hatch.build.targets.wheel]
-packages = ["backend"]
+packages = ["src"]
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "/backend",
+    "/src",
     "/tests",
     "/README.md",
     "/LICENSE",
@@ -478,4 +478,4 @@ exclude = [
 
 # Additional metadata for package managers
 [tool.setuptools_scm]
-write_to = "backend/_version.py"
+write_to = "src/_version.py"

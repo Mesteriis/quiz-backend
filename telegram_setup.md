@@ -151,12 +151,15 @@ GET  /telegram/health          # Проверка здоровья
 
 ```
 backend/
-├── services/
-│   └── telegram_service.py     # Основной сервис (aiogram)
-├── routers/
-│   └── telegram.py            # FastAPI роутеры
-├── telegram_bot_polling.py    # Скрипт для polling
-└── main.py                    # Интеграция с FastAPI
+├── src/
+│   ├── services/
+│   │   └── telegram_service.py     # Основной сервис (aiogram)
+│   ├── routers/
+│   │   └── telegram.py            # FastAPI роутеры
+│   ├── telegram_bot_polling.py    # Скрипт для polling
+│   └── main.py                    # Интеграция с FastAPI
+├── migrations/              # Миграции БД
+└── tests/                  # Тесты
 ```
 
 ### Компоненты:

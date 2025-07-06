@@ -5,22 +5,16 @@
 включая WebSocket соединения и управление уведомлениями.
 """
 
-import pytest
-import pytest_asyncio
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Dict, Any, List
 from unittest.mock import AsyncMock, MagicMock, patch
-import json
 
-from models import User, Survey, Question, Response
-from factories.user_factory import UserFactory
+from tests.factories.user_factory import UserFactory
+import pytest_asyncio
 
 
 class TestNotificationsSending:
     """Тесты для отправки уведомлений."""
 
-    @pytest_asyncio.async_test
+
     async def test_send_notification_success(
         self, api_client, auth_headers, db_session
     ):
@@ -62,7 +56,7 @@ class TestNotificationsSending:
             # Проверяем что сервис был вызван
             mock_notification_service.send_notification.assert_called_once()
 
-    @pytest_asyncio.async_test
+
     async def test_send_notification_admin_only_type(
         self, api_client, auth_headers, db_session
     ):
@@ -86,7 +80,7 @@ class TestNotificationsSending:
         assert response.status_code == 403
         assert "admin access required" in response.json()["detail"].lower()
 
-    @pytest_asyncio.async_test
+
     async def test_send_notification_admin_access(
         self, api_client, admin_headers, db_session
     ):
@@ -118,7 +112,7 @@ class TestNotificationsSending:
             data = response.json()
             assert data["success"] is True
 
-    @pytest_asyncio.async_test
+
     async def test_send_notification_requires_auth(self, api_client):
         """Тест что отправка уведомлений требует авторизацию."""
         notification_data = {
@@ -133,7 +127,7 @@ class TestNotificationsSending:
 
         assert response.status_code == 401
 
-    @pytest_asyncio.async_test
+
     async def test_send_notification_service_error(
         self, api_client, auth_headers, db_session
     ):
@@ -165,7 +159,7 @@ class TestNotificationsSending:
 class TestNotificationHistory:
     """Тесты для получения истории уведомлений."""
 
-    @pytest_asyncio.async_test
+
     async def test_get_user_notifications_own_history(
         self, api_client, auth_headers, db_session
     ):
@@ -221,7 +215,7 @@ class TestNotificationHistory:
                 user.id, 50
             )
 
-    @pytest_asyncio.async_test
+
     async def test_get_user_notifications_admin_access(
         self, api_client, admin_headers, db_session
     ):
@@ -244,7 +238,7 @@ class TestNotificationHistory:
             data = response.json()
             assert "notifications" in data
 
-    @pytest_asyncio.async_test
+
     async def test_get_user_notifications_forbidden_other_user(
         self, api_client, auth_headers, db_session
     ):
@@ -262,7 +256,7 @@ class TestNotificationHistory:
         assert response.status_code == 403
         assert "access denied" in response.json()["detail"].lower()
 
-    @pytest_asyncio.async_test
+
     async def test_get_user_notifications_with_limit(
         self, api_client, auth_headers, db_session
     ):
@@ -290,7 +284,7 @@ class TestNotificationHistory:
                 user.id, 10
             )
 
-    @pytest_asyncio.async_test
+
     async def test_get_user_notifications_requires_auth(self, api_client, db_session):
         """Тест что получение истории требует авторизацию."""
         user_factory = UserFactory(db_session)
@@ -304,7 +298,7 @@ class TestNotificationHistory:
 class TestNotificationStats:
     """Тесты для получения статистики уведомлений."""
 
-    @pytest_asyncio.async_test
+
     async def test_get_notification_stats_success(self, api_client, admin_headers):
         """Тест успешного получения статистики уведомлений."""
         mock_stats = {
@@ -338,7 +332,7 @@ class TestNotificationStats:
             assert "notifications_by_channel" in data
             assert data["active_connections"] == 15
 
-    @pytest_asyncio.async_test
+
     async def test_get_notification_stats_requires_admin(
         self, api_client, auth_headers, regular_user
     ):
@@ -352,7 +346,7 @@ class TestNotificationStats:
         assert response.status_code == 403
         assert "admin access required" in response.json()["detail"].lower()
 
-    @pytest_asyncio.async_test
+
     async def test_get_notification_stats_requires_auth(self, api_client):
         """Тест что получение статистики требует авторизацию."""
         response = await api_client.get("/api/notifications/stats")
@@ -363,7 +357,7 @@ class TestNotificationStats:
 class TestNotificationBroadcast:
     """Тесты для трансляции уведомлений."""
 
-    @pytest_asyncio.async_test
+
     async def test_broadcast_notification_success(self, api_client, admin_headers):
         """Тест успешной трансляции уведомления."""
         notification_data = {
@@ -398,7 +392,7 @@ class TestNotificationBroadcast:
             assert data["results"]["email"] is True
             assert data["results"]["telegram"] is True
 
-    @pytest_asyncio.async_test
+
     async def test_broadcast_notification_requires_admin(
         self, api_client, auth_headers, regular_user
     ):
@@ -418,7 +412,7 @@ class TestNotificationBroadcast:
         assert response.status_code == 403
         assert "admin access required" in response.json()["detail"].lower()
 
-    @pytest_asyncio.async_test
+
     async def test_broadcast_notification_requires_auth(self, api_client):
         """Тест что трансляция требует авторизацию."""
         notification_data = {
@@ -437,7 +431,7 @@ class TestNotificationBroadcast:
 class TestNotificationManagement:
     """Тесты для управления уведомлениями."""
 
-    @pytest_asyncio.async_test
+
     async def test_clear_user_notifications_own(
         self, api_client, auth_headers, db_session
     ):
@@ -465,7 +459,7 @@ class TestNotificationManagement:
             assert data["success"] is True
             assert "cleared" in data["message"].lower()
 
-    @pytest_asyncio.async_test
+
     async def test_clear_user_notifications_admin_access(
         self, api_client, admin_headers, db_session
     ):
@@ -490,7 +484,7 @@ class TestNotificationManagement:
             data = response.json()
             assert data["success"] is True
 
-    @pytest_asyncio.async_test
+
     async def test_clear_user_notifications_forbidden_other_user(
         self, api_client, auth_headers, db_session
     ):
@@ -508,7 +502,7 @@ class TestNotificationManagement:
         assert response.status_code == 403
         assert "access denied" in response.json()["detail"].lower()
 
-    @pytest_asyncio.async_test
+
     async def test_get_notification_channels(self, api_client):
         """Тест получения доступных каналов уведомлений."""
         response = await api_client.get("/api/notifications/channels")
@@ -525,7 +519,7 @@ class TestNotificationManagement:
         assert "email" in channels
         assert "telegram" in channels
 
-    @pytest_asyncio.async_test
+
     async def test_test_notification_success(
         self, api_client, auth_headers, db_session
     ):
@@ -554,7 +548,7 @@ class TestNotificationManagement:
             assert data["success"] is True
             assert "test" in data["message"].lower()
 
-    @pytest_asyncio.async_test
+
     async def test_test_notification_requires_auth(self, api_client):
         """Тест что тестовое уведомление требует авторизацию."""
         response = await api_client.post("/api/notifications/test")
@@ -565,7 +559,7 @@ class TestNotificationManagement:
 class TestNotificationIntegration:
     """Интеграционные тесты для уведомлений."""
 
-    @pytest_asyncio.async_test
+
     async def test_complete_notification_flow(
         self, api_client, auth_headers, admin_headers, db_session
     ):
@@ -629,7 +623,7 @@ class TestNotificationIntegration:
             assert response.status_code == 200
             assert response.json()["success"] is True
 
-    @pytest_asyncio.async_test
+
     async def test_admin_notification_flow(self, api_client, admin_headers, db_session):
         """Тест полного цикла админских уведомлений."""
         user_factory = UserFactory(db_session)

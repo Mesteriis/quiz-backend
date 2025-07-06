@@ -1,8 +1,9 @@
-import os
-import pytest
-import httpx
 import asyncio
-from typing import Dict, Optional
+import os
+from typing import Optional
+
+import httpx
+import pytest
 
 
 @pytest.fixture
@@ -38,7 +39,7 @@ class BaseApiClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.client.aclose()
 
-    def _headers(self, token: Optional[str] = None) -> Dict[str, str]:
+    def _headers(self, token: Optional[str] = None) -> dict[str, str]:
         """Получение заголовков с опциональной аутентификацией."""
         headers = {"Content-Type": "application/json"}
         if token:

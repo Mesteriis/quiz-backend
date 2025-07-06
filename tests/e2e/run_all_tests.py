@@ -7,44 +7,44 @@
     python run_all_tests.py --url http://localhost:8000
 """
 
-import os
-import sys
 import argparse
-import subprocess
-import time
 from datetime import datetime
+import os
+import subprocess
+import sys
+import time
 
 
 def parse_args():
     """Парсинг аргументов командной строки."""
     parser = argparse.ArgumentParser(description="Запуск e2e тестов API")
     parser.add_argument(
-        "--url", default="http://localhost:8000", 
-        help="URL API сервера (по умолчанию: http://localhost:8000)"
+        "--url",
+        default="http://localhost:8000",
+        help="URL API сервера (по умолчанию: http://localhost:8000)",
     )
     parser.add_argument(
-        "--token", default=None,
-        help="Токен API для авторизованных запросов"
+        "--token", default=None, help="Токен API для авторизованных запросов"
     )
     parser.add_argument(
-        "--admin-token", default=None,
-        help="Админский токен API для авторизованных запросов"
+        "--admin-token",
+        default=None,
+        help="Админский токен API для авторизованных запросов",
     )
     parser.add_argument(
-        "--telegram-token", default=None,
-        help="Токен Telegram бота для тестов Telegram API"
+        "--telegram-token",
+        default=None,
+        help="Токен Telegram бота для тестов Telegram API",
     )
     parser.add_argument(
-        "--only", default=None, choices=["api", "admin", "telegram"],
-        help="Запуск только указанного набора тестов"
+        "--only",
+        default=None,
+        choices=["api", "admin", "telegram"],
+        help="Запуск только указанного набора тестов",
     )
+    parser.add_argument("--verbose", "-v", action="store_true", help="Подробный вывод")
     parser.add_argument(
-        "--verbose", "-v", action="store_true",
-        help="Подробный вывод"
-    )
-    parser.add_argument(
-        "--report", action="store_true",
-        help="Создать HTML-отчет о тестировании"
+        "--report", action="store_true", help="Создать HTML-отчет о тестировании"
     )
     return parser.parse_args()
 
@@ -117,10 +117,10 @@ def main():
     end_time = time.time()
     duration = end_time - start_time
 
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print(f"Общий результат тестирования: {'УСПЕХ' if success else 'ОШИБКИ'}")
     print(f"Время выполнения: {duration:.2f} секунд")
-    print("="*50)
+    print("=" * 50)
 
     return 0 if success else 1
 

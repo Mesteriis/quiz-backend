@@ -5,19 +5,19 @@
 включая настройку БД, аутентификацию и создание тестовых данных.
 """
 
-import pytest
-import pytest_asyncio
-import sys
-import os
 import asyncio
+from collections.abc import AsyncGenerator
+import logging
+import os
 from pathlib import Path
-from typing import AsyncGenerator, Dict, Any
+import sys
+from unittest.mock import AsyncMock, MagicMock
+
 from httpx import AsyncClient
-from sqlmodel import SQLModel, select
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import StaticPool
-from unittest.mock import AsyncMock, MagicMock
-import logging
+from sqlmodel import SQLModel
 
 # Настройка логирования для тестов
 logging.basicConfig(level=logging.INFO)
@@ -28,12 +28,11 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 # Импорты после добавления пути
-from main import app
 from config import Settings
 from database import get_async_session
-from models import User, Survey, Question, Response, UserData
+from main import app
+from models import Question, Response, Survey, User, UserData
 from services.jwt_service import jwt_service
-
 
 # Конфигурация pytest-asyncio
 pytest_plugins = ["pytest_asyncio"]
@@ -120,10 +119,10 @@ async def client(test_settings, db_session) -> AsyncGenerator[AsyncClient, None]
 
 
 @pytest.fixture
-async def auth_headers(db_session) -> Dict[str, str]:
+async def auth_headers(db_session) -> dict[str, str]:
     """Фикстура для создания заголовков авторизации."""
 
-    async def create_auth_headers(user: User) -> Dict[str, str]:
+    async def create_auth_headers(user: User) -> dict[str, str]:
         """Создает заголовки авторизации для пользователя."""
         access_token = jwt_service.create_access_token(
             user_id=user.id,
@@ -137,7 +136,7 @@ async def auth_headers(db_session) -> Dict[str, str]:
 
 
 @pytest.fixture
-async def admin_headers(db_session, auth_headers) -> Dict[str, str]:
+async def admin_headers(db_session, auth_headers) -> dict[str, str]:
     """Фикстура для создания заголовков авторизации админа."""
     # Создаем админа
     admin = User(
@@ -348,19 +347,19 @@ def api_client(client):
         async def delete(self, url: str, **kwargs):
             return await self.client.delete(url, **kwargs)
 
-        async def auth_get(self, url: str, headers: Dict[str, str], **kwargs):
+        async def auth_get(self, url: str, headers: dict[str, str], **kwargs):
             """GET запрос с авторизацией."""
             return await self.client.get(url, headers=headers, **kwargs)
 
-        async def auth_post(self, url: str, headers: Dict[str, str], **kwargs):
+        async def auth_post(self, url: str, headers: dict[str, str], **kwargs):
             """POST запрос с авторизацией."""
             return await self.client.post(url, headers=headers, **kwargs)
 
-        async def auth_put(self, url: str, headers: Dict[str, str], **kwargs):
+        async def auth_put(self, url: str, headers: dict[str, str], **kwargs):
             """PUT запрос с авторизацией."""
             return await self.client.put(url, headers=headers, **kwargs)
 
-        async def auth_delete(self, url: str, headers: Dict[str, str], **kwargs):
+        async def auth_delete(self, url: str, headers: dict[str, str], **kwargs):
             """DELETE запрос с авторизацией."""
             return await self.client.delete(url, headers=headers, **kwargs)
 
@@ -375,9 +374,9 @@ def assert_response():
         response, expected_status: int = 200, expected_keys: list = None
     ):
         """Проверяет ответ API."""
-        assert response.status_code == expected_status, (
-            f"Expected {expected_status}, got {response.status_code}: {response.text}"
-        )
+        assert (
+            response.status_code == expected_status
+        ), f"Expected {expected_status}, got {response.status_code}: {response.text}"
 
         if expected_keys:
             data = response.json()

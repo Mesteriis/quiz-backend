@@ -1,10 +1,10 @@
-import os
-import pytest
-import httpx
-import asyncio
-import uuid
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+import os
+from typing import Optional
+import uuid
+
+import httpx
+import pytest
 
 
 @pytest.fixture
@@ -35,7 +35,7 @@ class TestTelegramApiClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.client.aclose()
 
-    def _headers(self, token: Optional[str] = None) -> Dict[str, str]:
+    def _headers(self, token: Optional[str] = None) -> dict[str, str]:
         """Получение заголовков с опциональной аутентификацией."""
         headers = {"Content-Type": "application/json"}
         if token:
@@ -54,8 +54,7 @@ async def telegram_client(base_url, telegram_token):
 async def test_telegram_health(telegram_client):
     """Тест проверки работоспособности Telegram интеграции."""
     response = await telegram_client.client.get(
-        "/api/telegram/health",
-        headers=telegram_client._headers()
+        "/api/telegram/health", headers=telegram_client._headers()
     )
 
     assert response.status_code == 200
@@ -69,8 +68,7 @@ async def test_telegram_health(telegram_client):
 async def test_telegram_status(telegram_client):
     """Тест получения статуса Telegram бота."""
     response = await telegram_client.client.get(
-        "/api/telegram/status",
-        headers=telegram_client._headers()
+        "/api/telegram/status", headers=telegram_client._headers()
     )
 
     assert response.status_code == 200
@@ -87,8 +85,7 @@ async def test_telegram_status(telegram_client):
 async def test_get_webhook_info(telegram_client):
     """Тест получения информации о webhook."""
     response = await telegram_client.client.get(
-        "/api/telegram/webhook/info",
-        headers=telegram_client._headers()
+        "/api/telegram/webhook/info", headers=telegram_client._headers()
     )
 
     # Этот запрос может не сработать, если бот не инициализирован
@@ -119,7 +116,7 @@ async def test_set_webhook(telegram_client):
     response = await telegram_client.client.post(
         "/api/telegram/webhook/set",
         json=webhook_data,
-        headers=telegram_client._headers()
+        headers=telegram_client._headers(),
     )
 
     # Этот запрос может не сработать, если бот не инициализирован
@@ -130,8 +127,7 @@ async def test_set_webhook(telegram_client):
 
         # Проверяем, действительно ли webhook был установлен
         info_response = await telegram_client.client.get(
-            "/api/telegram/webhook/info",
-            headers=telegram_client._headers()
+            "/api/telegram/webhook/info", headers=telegram_client._headers()
         )
 
         if info_response.status_code == 200:
@@ -152,12 +148,14 @@ async def test_delete_webhook(telegram_client):
     """Тест удаления webhook."""
     # Пропускаем этот тест, если мы до этого не устанавливали вебхук
     # или если previous_webhook_url не пустой (не хотим удалять боевой вебхук)
-    if hasattr(telegram_client, "previous_webhook_url") and telegram_client.previous_webhook_url:
+    if (
+        hasattr(telegram_client, "previous_webhook_url")
+        and telegram_client.previous_webhook_url
+    ):
         pytest.skip("Skipping to avoid deleting production webhook")
 
     response = await telegram_client.client.post(
-        "/api/telegram/webhook/delete",
-        headers=telegram_client._headers()
+        "/api/telegram/webhook/delete", headers=telegram_client._headers()
     )
 
     # Этот запрос может не сработать, если бот не инициализирован
@@ -168,8 +166,7 @@ async def test_delete_webhook(telegram_client):
 
         # Проверяем, действительно ли webhook был удален
         info_response = await telegram_client.client.get(
-            "/api/telegram/webhook/info",
-            headers=telegram_client._headers()
+            "/api/telegram/webhook/info", headers=telegram_client._headers()
         )
 
         if info_response.status_code == 200:
@@ -189,8 +186,7 @@ async def test_delete_webhook(telegram_client):
 async def test_telegram_security_stats(telegram_client):
     """Тест получения статистики безопасности Telegram вебхука."""
     response = await telegram_client.client.get(
-        "/api/telegram/security/stats",
-        headers=telegram_client._headers()
+        "/api/telegram/security/stats", headers=telegram_client._headers()
     )
 
     assert response.status_code == 200
@@ -210,7 +206,7 @@ async def test_send_admin_notification(telegram_client):
     response = await telegram_client.client.post(
         "/api/telegram/send-admin-notification",
         json=notification_data,
-        headers=telegram_client._headers()
+        headers=telegram_client._headers(),
     )
 
     # Этот запрос может не сработать, если бот не инициализирован
@@ -244,7 +240,7 @@ async def test_restore_original_webhook(telegram_client):
     response = await telegram_client.client.post(
         "/api/telegram/webhook/set",
         json=webhook_data,
-        headers=telegram_client._headers()
+        headers=telegram_client._headers(),
     )
 
     # Этот запрос может не сработать, если бот не инициализирован
