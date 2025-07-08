@@ -13,7 +13,15 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from models.user import User
-from services.jwt_service import get_current_user
+from repositories.dependencies import (
+    get_question_repository,
+    get_response_repository,
+    get_survey_repository,
+)
+from repositories.question import QuestionRepository
+from repositories.response import ResponseRepository
+from repositories.survey import SurveyRepository
+from routers.auth import get_current_user
 from services.telegram_webapp import get_webapp_service
 
 logger = logging.getLogger(__name__)
@@ -108,74 +116,69 @@ async def submit_survey_answers(
     survey_id: int,
     answer_request: SurveyAnswerRequest,
     current_user: User = Depends(get_current_user),
+    question_repo: QuestionRepository = Depends(get_question_repository),
+    response_repo: ResponseRepository = Depends(get_response_repository),
 ):
     """Submit survey answers from Telegram Web App."""
     try:
-        # Import here to avoid circular imports
-        from sqlalchemy import select
+        # Get survey questions using repository
+        questions = await question_repo.get_by_survey_id(survey_id)
 
-        from database import get_async_session
-        from models.question import Question
-        from models.response import Response
+        if not questions:
+            raise HTTPException(status_code=404, detail="Survey not found")
 
-        async with get_async_session() as session:
-            # Validate survey and questions
-            questions_stmt = select(Question).where(Question.survey_id == survey_id)
-            questions_result = await session.execute(questions_stmt)
-            questions = {q.id: q for q in questions_result.scalars().all()}
+        # Convert to dict for easier access
+        questions_dict = {q.id: q for q in questions}
 
-            if not questions:
-                raise HTTPException(status_code=404, detail="Survey not found")
+        # Save responses
+        saved_responses = []
 
-            # Save responses
-            saved_responses = []
+        for question_id, answer in answer_request.answers.items():
+            if question_id not in questions_dict:
+                continue
 
-            for question_id, answer in answer_request.answers.items():
-                if question_id not in questions:
-                    continue
-
-                # Check if response already exists
-                existing_response_stmt = select(Response).where(
-                    Response.question_id == question_id,
-                    Response.user_id == current_user.id,
-                )
-                existing_result = await session.execute(existing_response_stmt)
-                existing_response = existing_result.scalar_one_or_none()
-
-                if existing_response:
-                    # Update existing response
-                    existing_response.answer = {"value": answer}
-                    saved_responses.append(existing_response)
-                else:
-                    # Create new response
-                    new_response = Response(
-                        question_id=question_id,
-                        user_id=current_user.id,
-                        user_session_id=f"webapp_{current_user.id}",
-                        answer={"value": answer},
-                    )
-                    session.add(new_response)
-                    saved_responses.append(new_response)
-
-            await session.commit()
-
-            # Send completion notification
-            from services.realtime_notifications import get_notification_service
-
-            notification_service = get_notification_service()
-
-            completion_notification = (
-                await notification_service.create_completion_notification(
-                    survey_id, current_user.id
-                )
+            # Check if response already exists
+            existing_response = await response_repo.get_by_question_and_user(
+                question_id, current_user.id
             )
-            await notification_service.send_notification(completion_notification)
 
-            return {
-                "success": True,
-                "saved_responses": len(saved_responses),
-                "message": "Ответы сохранены успешно",
-            }
+            if existing_response:
+                # Update existing response
+                existing_response.answer = {"value": answer}
+                updated_response = await response_repo.update(
+                    db_obj=existing_response, obj_in={"answer": {"value": answer}}
+                )
+                saved_responses.append(updated_response)
+            else:
+                # Create new response
+                from models.response import ResponseCreate
+
+                response_data = ResponseCreate(
+                    question_id=question_id,
+                    user_id=current_user.id,
+                    user_session_id=f"webapp_{current_user.id}",
+                    answer={"value": answer},
+                )
+                new_response = await response_repo.create(obj_in=response_data)
+                saved_responses.append(new_response)
+
+        # Send completion notification
+        from services.realtime_notifications import get_notification_service
+
+        notification_service = get_notification_service()
+
+        completion_notification = (
+            await notification_service.create_completion_notification(
+                survey_id, current_user.id
+            )
+        )
+        await notification_service.send_notification(completion_notification)
+
+        return {
+            "success": True,
+            "saved_responses": len(saved_responses),
+            "message": "Ответы сохранены успешно",
+        }
 
     except HTTPException:
         raise
@@ -237,54 +240,29 @@ async def get_webapp_user_profile(current_user: User = Depends(get_current_user)
 
 
 @router.get("/user/stats")
-async def get_webapp_user_stats(current_user: User = Depends(get_current_user)):
+async def get_webapp_user_stats(
+    current_user: User = Depends(get_current_user),
+    response_repo: ResponseRepository = Depends(get_response_repository),
+    survey_repo: SurveyRepository = Depends(get_survey_repository),
+):
     """Get user statistics for Telegram Web App."""
     try:
-        from sqlalchemy import distinct, func, select
+        # Get user's total responses using repository
+        total_responses = await response_repo.count_user_responses(current_user.id)
 
-        from database import get_async_session
-        from models.question import Question
-        from models.response import Response
-        from models.survey import Survey
+        # Get available public surveys using repository
+        available_surveys = await survey_repo.count_active_public_surveys()
 
-        async with get_async_session() as session:
-            # Count completed surveys
-            completed_surveys_stmt = select(
-                func.count(
-                    distinct(
-                        Response.question_id.in_(
-                            select(Question.id).where(Question.survey_id == Survey.id)
-                        )
-                    )
-                )
-            ).where(Response.user_id == current_user.id)
-
-            # Total responses
-            total_responses_stmt = select(func.count(Response.id)).where(
-                Response.user_id == current_user.id
-            )
-
-            # Available surveys
-            available_surveys_stmt = select(func.count(Survey.id)).where(
-                Survey.is_active == True, Survey.is_public == True
-            )
-
-            total_responses_result = await session.execute(total_responses_stmt)
-            available_surveys_result = await session.execute(available_surveys_stmt)
-
-            total_responses = total_responses_result.scalar() or 0
-            available_surveys = available_surveys_result.scalar() or 0
-
-            return {
-                "total_responses": total_responses,
-                "available_surveys": available_surveys,
-                "completion_rate": (total_responses / available_surveys * 100)
-                if available_surveys > 0
-                else 0,
-                "last_activity": current_user.updated_at.isoformat()
-                if current_user.updated_at
-                else None,
-            }
+        return {
+            "total_responses": total_responses,
+            "available_surveys": available_surveys,
+            "completion_rate": (total_responses / available_surveys * 100)
+            if available_surveys > 0
+            else 0,
+            "last_activity": current_user.updated_at.isoformat()
+            if current_user.updated_at
+            else None,
+        }
 
     except Exception as e:
         logger.error(f"Error getting user stats: {e}")

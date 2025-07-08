@@ -9,13 +9,21 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from database import get_async_session
-from models.user import User, UserCreate, UserProfile, UserResponse, UserUpdate
+from models.user import User
+from schemas.user import (
+    UserCreate,
+    UserLogin,
+    TelegramAuth,
+    UserProfile,
+    UserResponse,
+    UserUpdate,
+    RefreshTokenRequest,
+)
+from repositories.dependencies import get_user_repository
+from repositories.user import UserRepository
 from schemas.admin import SuccessResponse
 from services.jwt_service import jwt_service
-from services.user_service import user_service
 
 router = APIRouter()
 security = HTTPBearer()
@@ -23,14 +31,14 @@ security = HTTPBearer()
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    session: AsyncSession = Depends(get_async_session),
+    user_repo: UserRepository = Depends(get_user_repository),
 ) -> User:
     """
     Dependency to get current authenticated user from JWT token.
 
     Args:
         credentials: HTTP Authorization credentials
-        session: Database session
+        user_repo: User repository
 
     Returns:
         User: Current authenticated user
@@ -40,28 +48,54 @@ async def get_current_user(
     """
     token = credentials.credentials
 
-    # Verify token and get user
-    user = await user_service.get_user_from_token(session, token)
-    if not user:
+    try:
+        # Verify token to get user ID
+        payload = jwt_service.verify_token(token)
+        if not payload:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        user_id = payload.get("user_id")
+
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token payload",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Get user from repository
+        user = await user_repo.get(int(user_id))
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        return user
+
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    return user
-
 
 async def get_optional_user(
     authorization: Optional[str] = Header(None),
-    session: AsyncSession = Depends(get_async_session),
+    user_repo: UserRepository = Depends(get_user_repository),
 ) -> Optional[User]:
     """
     Dependency to get current user if token is provided (optional authentication).
 
     Args:
         authorization: Authorization header
-        session: Database session
+        user_repo: User repository
 
     Returns:
         User or None: Current user if authenticated, None otherwise
@@ -72,8 +106,20 @@ async def get_optional_user(
     token = authorization.split(" ")[1]
 
     try:
-        user = await user_service.get_user_from_token(session, token)
+        # Verify token to get user ID
+        payload = jwt_service.verify_token(token)
+        if not payload:
+            return None
+
+        user_id = payload.get("user_id")
+
+        if not user_id:
+            return None
+
+        # Get user from repository
+        user = await user_repo.get(int(user_id))
         return user
+
     except Exception:
         return None
 
@@ -101,7 +147,7 @@ async def get_admin_user(current_user: User = Depends(get_current_user)) -> User
 
 @router.post("/register", response_model=dict)
 async def register_user(
-    user_data: UserCreate, session: AsyncSession = Depends(get_async_session)
+    user_data: UserCreate, user_repo: UserRepository = Depends(get_user_repository)
 ):
     """
     Register a new user.
@@ -110,20 +156,40 @@ async def register_user(
     Supports both regular and Telegram users.
     """
     try:
+        # Check if user already exists
+        if user_data.telegram_id:
+            existing_user = await user_repo.get_by_telegram_id(user_data.telegram_id)
+            if existing_user:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="User with this Telegram ID already exists",
+                )
+
+        if user_data.username:
+            existing_user = await user_repo.get_by_username(user_data.username)
+            if existing_user:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="User with this username already exists",
+                )
+
+        if user_data.email:
+            existing_user = await user_repo.get_by_email(user_data.email)
+            if existing_user:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="User with this email already exists",
+                )
+
         # Create user
-        user = await user_service.create_user(session, user_data)
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="User with this username, email, or Telegram ID already exists",
-            )
+        user = await user_repo.create(obj_in=user_data)
 
         # Generate tokens
-        tokens = user_service.generate_user_tokens(user)
+        tokens = _generate_user_tokens(user)
 
         return {
             "message": "User created successfully",
-            "user": user.to_dict(),
+            "user": UserResponse.model_validate(user).model_dump(),
             **tokens,
         }
 
@@ -138,9 +204,8 @@ async def register_user(
 
 @router.post("/login", response_model=dict)
 async def login_user(
-    identifier: Optional[str] = None,
-    telegram_id: Optional[int] = None,
-    session: AsyncSession = Depends(get_async_session),
+    login_data: UserLogin,
+    user_repo: UserRepository = Depends(get_user_repository),
 ):
     """
     Authenticate user and return JWT tokens.
@@ -150,24 +215,42 @@ async def login_user(
     - Telegram ID
     """
     try:
-        if not identifier and not telegram_id:
+        if not login_data.identifier and not login_data.telegram_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Either identifier or telegram_id must be provided",
             )
 
-        # Authenticate user
-        user = await user_service.authenticate_user(session, identifier, telegram_id)
+        user = None
+
+        # Authenticate by Telegram ID
+        if login_data.telegram_id:
+            user = await user_repo.get_by_telegram_id(login_data.telegram_id)
+        # Authenticate by username/email
+        elif login_data.identifier:
+            user = await user_repo.get_by_identifier(login_data.identifier)
+
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials or user not found",
             )
 
-        # Generate tokens
-        tokens = user_service.generate_user_tokens(user)
+        # Check if user is active
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User account is not active",
+            )
 
-        return {"message": "Login successful", "user": user.to_dict(), **tokens}
+        # Generate tokens
+        tokens = _generate_user_tokens(user)
+
+        return {
+            "message": "Login successful",
+            "user": UserResponse.model_validate(user).model_dump(),
+            **tokens,
+        }
 
     except HTTPException:
         raise
@@ -180,44 +263,67 @@ async def login_user(
 
 @router.post("/telegram", response_model=dict)
 async def telegram_auth(
-    telegram_id: int,
-    telegram_username: Optional[str] = None,
-    telegram_first_name: Optional[str] = None,
-    telegram_last_name: Optional[str] = None,
-    telegram_photo_url: Optional[str] = None,
-    session: AsyncSession = Depends(get_async_session),
+    telegram_data: TelegramAuth,
+    user_repo: UserRepository = Depends(get_user_repository),
 ):
     """
-    Authenticate or create user via Telegram.
+    Authenticate or register user via Telegram.
 
-    Creates new user if doesn't exist, or updates existing user data.
-    Returns JWT tokens for authentication.
+    Creates a new user if doesn't exist, or authenticates existing user.
     """
     try:
-        # Create or update Telegram user
-        user = await user_service.create_or_update_telegram_user(
-            session=session,
-            telegram_id=telegram_id,
-            telegram_username=telegram_username,
-            telegram_first_name=telegram_first_name,
-            telegram_last_name=telegram_last_name,
-            telegram_photo_url=telegram_photo_url,
-        )
+        # Check if user already exists
+        existing_user = await user_repo.get_by_telegram_id(telegram_data.telegram_id)
 
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create or update Telegram user",
+        if existing_user:
+            # User exists, update their Telegram data and authenticate
+            update_data = UserUpdate(
+                telegram_username=telegram_data.telegram_username,
+                telegram_first_name=telegram_data.telegram_first_name,
+                telegram_last_name=telegram_data.telegram_last_name,
+                first_name=telegram_data.telegram_first_name
+                or existing_user.first_name,
+                last_name=telegram_data.telegram_last_name or existing_user.last_name,
             )
 
-        # Generate tokens
-        tokens = user_service.generate_user_tokens(user)
+            updated_user = await user_repo.update(
+                db_obj=existing_user, obj_in=update_data
+            )
+            tokens = _generate_user_tokens(updated_user)
 
-        return {
-            "message": "Telegram authentication successful",
-            "user": user.to_dict(),
-            **tokens,
-        }
+            return {
+                "message": "Telegram authentication successful",
+                "user": UserResponse.model_validate(updated_user).model_dump(),
+                **tokens,
+            }
+        else:
+            # User doesn't exist, create new
+            user_data = UserCreate(
+                username=telegram_data.telegram_username
+                or f"user_{telegram_data.telegram_id}",
+                email=None,
+                telegram_id=telegram_data.telegram_id,
+                telegram_username=telegram_data.telegram_username,
+                telegram_first_name=telegram_data.telegram_first_name,
+                telegram_last_name=telegram_data.telegram_last_name,
+                telegram_photo_url=telegram_data.telegram_photo_url,
+                first_name=telegram_data.telegram_first_name,
+                last_name=telegram_data.telegram_last_name,
+                display_name=telegram_data.telegram_first_name
+                or telegram_data.telegram_username
+                or f"User {telegram_data.telegram_id}",
+            )
+
+            user = await user_repo.create(obj_in=user_data)
+
+            # Generate tokens
+            tokens = _generate_user_tokens(user)
+
+            return {
+                "message": "Telegram user created and authenticated",
+                "user": UserResponse.model_validate(user).model_dump(),
+                **tokens,
+            }
 
     except HTTPException:
         raise
@@ -230,43 +336,51 @@ async def telegram_auth(
 
 @router.post("/refresh", response_model=dict)
 async def refresh_token(
-    refresh_token: str, session: AsyncSession = Depends(get_async_session)
+    request: RefreshTokenRequest,
+    user_repo: UserRepository = Depends(get_user_repository),
 ):
     """
-    Refresh access token using refresh token.
+    Refresh JWT access token using refresh token.
 
-    Args:
-        refresh_token: Valid refresh token
-
-    Returns:
-        New access and refresh tokens
+    Validates refresh token and returns new access token.
     """
     try:
-        # Verify refresh token
-        token_data = jwt_service.verify_token(refresh_token)
-        if not token_data or token_data.get("type") != "refresh":
+        # Verify refresh token to get user ID
+        payload = jwt_service.verify_token(request.refresh_token)
+        if not payload:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token",
             )
+        user_id = payload.get("user_id")
 
-        user_id = token_data.get("user_id")
         if not user_id:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload"
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token",
             )
 
-        # Get user
-        user = await user_service.get_user_by_id(session, user_id)
+        # Get user from repository
+        user = await user_repo.get(int(user_id))
         if not user or not user.is_active:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User not found or inactive",
+                detail="Invalid refresh token",
             )
 
-        # Generate new tokens
-        tokens = user_service.generate_user_tokens(user)
+        # Generate new access token
+        access_token = jwt_service.create_access_token(
+            user_id=user.id,
+            telegram_id=user.telegram_id,
+            username=user.username,
+            is_admin=user.is_admin,
+        )
 
-        return {"message": "Token refreshed successfully", **tokens}
+        return {
+            "message": "Token refreshed successfully",
+            "access_token": access_token,
+            "token_type": "bearer",
+        }
 
     except HTTPException:
         raise
@@ -280,42 +394,29 @@ async def refresh_token(
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_profile(current_user: User = Depends(get_current_user)):
     """
-    Get current user profile information.
+    Get current user's profile information.
 
-    Returns:
-        Current user's profile data
+    Returns detailed profile information for the authenticated user.
     """
-    return UserResponse(**current_user.to_dict())
+    return UserResponse.model_validate(current_user)
 
 
 @router.put("/me", response_model=UserResponse)
 async def update_current_user_profile(
     user_data: UserUpdate,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_async_session),
+    user_repo: UserRepository = Depends(get_user_repository),
 ):
     """
-    Update current user profile information.
+    Update current user's profile information.
 
-    Args:
-        user_data: Updated user data
-        current_user: Current authenticated user
-        session: Database session
-
-    Returns:
-        Updated user profile
+    Allows users to update their own profile data.
     """
     try:
-        updated_user = await user_service.update_user(
-            session, current_user.id, user_data
-        )
-        if not updated_user:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to update user profile",
-            )
+        # Update user using repository
+        updated_user = await user_repo.update(db_obj=current_user, obj_in=user_data)
 
-        return UserResponse(**updated_user.to_dict())
+        return UserResponse.model_validate(updated_user)
 
     except HTTPException:
         raise
@@ -331,24 +432,21 @@ async def get_users(
     skip: int = 0,
     limit: int = 100,
     admin_user: User = Depends(get_admin_user),
-    session: AsyncSession = Depends(get_async_session),
+    user_repo: UserRepository = Depends(get_user_repository),
 ):
     """
-    Get list of users (admin only).
+    Get all users (admin only).
 
-    Args:
-        skip: Number of users to skip
-        limit: Maximum number of users to return
-        admin_user: Current admin user
-        session: Database session
-
-    Returns:
-        List of users
+    Returns paginated list of all users in the system.
     """
     try:
-        users = await user_service.get_users(session, skip, limit)
-        return [UserResponse(**user.to_dict()) for user in users]
+        # Get users using repository
+        users = await user_repo.get_multi(skip=skip, limit=limit)
 
+        return [UserResponse.model_validate(user) for user in users]
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -359,36 +457,38 @@ async def get_users(
 @router.get("/users/{user_id}", response_model=UserProfile)
 async def get_user_profile(
     user_id: int,
-    session: AsyncSession = Depends(get_async_session),
+    user_repo: UserRepository = Depends(get_user_repository),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
     """
     Get user profile by ID.
 
-    Public endpoint that returns limited profile information.
-    Admins can see full profile information.
+    Returns public profile information for any user.
     """
     try:
-        user = await user_service.get_user_by_id(session, user_id)
+        # Get user using repository
+        user = await user_repo.get(user_id)
+
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
             )
 
-        # Return profile data
-        profile_data = {
-            "id": user.id,
-            "display_name": user.get_display_name(),
-            "first_name": user.first_name,
-            "last_name": user.last_name,
-            "bio": user.bio,
-            "telegram_username": user.telegram_username,
-            "is_verified": user.is_verified,
-            "created_at": user.created_at,
-            "responses_count": len(user.responses) if user.responses else 0,
-        }
+        # Create profile response
+        profile = UserProfile(
+            id=user.id,
+            username=user.username,
+            display_name=user.display_name,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            bio=user.bio,
+            telegram_username=user.telegram_username,
+            telegram_photo_url=user.telegram_photo_url,
+            is_verified=user.is_verified,
+            created_at=user.created_at,
+        )
 
-        return UserProfile(**profile_data)
+        return profile
 
     except HTTPException:
         raise
@@ -400,44 +500,61 @@ async def get_user_profile(
 
 
 @router.post("/verify-token", response_model=dict)
-async def verify_token(token: str, session: AsyncSession = Depends(get_async_session)):
+async def verify_token(current_user: User = Depends(get_current_user)):
     """
     Verify JWT token validity.
 
-    Args:
-        token: JWT token to verify
-
-    Returns:
-        Token validation result
+    Returns token validity status and user information.
     """
-    try:
-        user = await user_service.get_user_from_token(session, token)
-
-        if user:
-            return {
-                "valid": True,
-                "user": user.to_dict(),
-                "expires_at": jwt_service.get_token_expiration(token).isoformat()
-                if jwt_service.get_token_expiration(token)
-                else None,
-            }
-        else:
-            return {"valid": False, "error": "Invalid or expired token"}
-
-    except Exception as e:
-        return {"valid": False, "error": f"Token verification failed: {e!s}"}
+    return {
+        "message": "Token is valid",
+        "user": {
+            "id": current_user.id,
+            "username": current_user.username,
+            "email": current_user.email,
+            "is_admin": current_user.is_admin,
+            "is_verified": current_user.is_verified,
+        },
+        "token_valid": True,
+    }
 
 
 @router.delete("/logout", response_model=SuccessResponse)
 async def logout_user(current_user: User = Depends(get_current_user)):
     """
-    Logout user (invalidate current session).
+    Logout user (invalidate token).
 
-    Note: Since we're using stateless JWT tokens, this endpoint
-    doesn't actually invalidate tokens server-side. In a production
-    environment, you might want to implement a token blacklist.
+    Note: In a stateless JWT system, logout is handled client-side
+    by removing the token. This endpoint confirms logout intent.
     """
     return SuccessResponse(
         success=True,
-        message=f"User {current_user.get_display_name()} logged out successfully",
+        message=f"User {current_user.username} logged out successfully",
     )
+
+
+def _generate_user_tokens(user: User) -> dict[str, str]:
+    """
+    Generate JWT tokens for user.
+
+    Args:
+        user: User instance
+
+    Returns:
+        Dictionary with access and refresh tokens
+    """
+    access_token = jwt_service.create_access_token(
+        user_id=user.id,
+        telegram_id=user.telegram_id,
+        username=user.username,
+        is_admin=user.is_admin,
+    )
+    refresh_token = jwt_service.create_refresh_token(
+        user_id=user.id, telegram_id=user.telegram_id
+    )
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+    }

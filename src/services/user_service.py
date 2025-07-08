@@ -12,7 +12,8 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models.user import User, UserCreate, UserUpdate
+from models.user import User
+from schemas.user import UserCreate, UserUpdate
 from services.jwt_service import create_user_token, jwt_service
 
 logger = logging.getLogger(__name__)
@@ -127,7 +128,9 @@ class UserService:
             await session.commit()
             await session.refresh(user)
 
-            logger.info(f"Created new user: {user.get_identifier()}")
+            logger.info(
+                f"Created new user: {user.username or user.telegram_id or user.id}"
+            )
             return user
 
         except Exception as e:
@@ -169,7 +172,7 @@ class UserService:
             await session.commit()
             await session.refresh(user)
 
-            logger.info(f"Updated user: {user.get_identifier()}")
+            logger.info(f"Updated user: {user.username or user.telegram_id or user.id}")
             return user
 
         except Exception as e:
@@ -181,12 +184,12 @@ class UserService:
         self, session: AsyncSession, identifier: str, telegram_id: Optional[int] = None
     ) -> Optional[User]:
         """
-        Authenticate user by username, email, or Telegram ID.
+        Authenticate user by identifier or Telegram ID.
 
         Args:
             session: Database session
-            identifier: Username or email (if not Telegram user)
-            telegram_id: Telegram ID (if Telegram user)
+            identifier: Username or email
+            telegram_id: Telegram user ID
 
         Returns:
             User object if authentication successful, None otherwise
@@ -207,8 +210,10 @@ class UserService:
 
             if user and user.is_active:
                 # Update last login
-                user.update_last_login()
+                user.updated_at = datetime.utcnow()
                 await session.commit()
+                # ВАЖНО: Refresh объект после commit, чтобы избежать detached state
+                await session.refresh(user)
                 return user
 
             return None
@@ -255,7 +260,9 @@ class UserService:
                 await session.commit()
                 await session.refresh(user)
 
-                logger.info(f"Updated Telegram user: {user.get_identifier()}")
+                logger.info(
+                    f"Updated Telegram user: {user.username or user.telegram_id or user.id}"
+                )
                 return user
             else:
                 # Create new user

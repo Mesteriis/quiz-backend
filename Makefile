@@ -110,13 +110,102 @@ dev-debug: ## Start backend with debug logging
 	DEBUG=true LOG_LEVEL=DEBUG $(UV) run uvicorn src.main:app --reload --host 0.0.0.0 --port $(BACKEND_PORT)
 
 # ================================
-# 🧪 TESTING
+# 🧪 TESTING WITH POLYFACTORY
 # ================================
 
 .PHONY: test
 test: ## 🧪 Run all tests
 	@echo "$(BOLD)$(BLUE)$(TEST) Running all tests...$(RESET)"
 	$(UV) run pytest
+
+.PHONY: test-with-file-db
+test-with-file-db: ## 🗄️ Run tests with file database for analysis
+	@echo "$(BOLD)$(BLUE)$(TEST) Running tests with file database...$(RESET)"
+	TEST_USE_FILE_DB=true $(UV) run pytest -v
+	@echo "$(GREEN)$(CHECK) Test database files available in tests/data/$(RESET)"
+
+.PHONY: test-fast
+test-fast: ## ⚡ Run tests with in-memory database (fast)
+	@echo "$(BOLD)$(BLUE)$(TEST) Running fast tests with in-memory database...$(RESET)"
+	TEST_USE_FILE_DB=false $(UV) run pytest
+
+.PHONY: analyze-test-db
+analyze-test-db: ## 🔍 Analyze the latest test database
+	@echo "$(BOLD)$(CYAN)$(GEAR) Analyzing latest test database...$(RESET)"
+	@latest_db=$$(ls tests/data/quiz_test_*.db 2>/dev/null | sort -n | tail -1); \
+	if [ -n "$$latest_db" ]; then \
+		echo "$(GREEN)$(CHECK) Opening: $$latest_db$(RESET)"; \
+		sqlite3 "$$latest_db" ".schema" | head -20; \
+		echo ""; \
+		echo "$(YELLOW)Available tables:$(RESET)"; \
+		sqlite3 "$$latest_db" ".tables"; \
+		echo ""; \
+		echo "$(BLUE)Recent users:$(RESET)"; \
+		sqlite3 "$$latest_db" "SELECT id, username, email, is_active FROM users ORDER BY created_at DESC LIMIT 5;" 2>/dev/null || echo "No users table"; \
+		echo ""; \
+		echo "$(BLUE)Recent surveys:$(RESET)"; \
+		sqlite3 "$$latest_db" "SELECT id, title, is_public, is_active FROM surveys ORDER BY created_at DESC LIMIT 5;" 2>/dev/null || echo "No surveys table"; \
+	else \
+		echo "$(RED)$(CROSS) No test database files found$(RESET)"; \
+		echo "$(YELLOW)Run 'make test-with-file-db' first$(RESET)"; \
+	fi
+
+.PHONY: clean-test-dbs
+clean-test-dbs: ## 🧹 Clean old test database files
+	@echo "$(BOLD)$(YELLOW)$(CLEAN) Cleaning old test database files...$(RESET)"
+	@if ls tests/data/quiz_test_*.db 1> /dev/null 2>&1; then \
+		rm -f tests/data/quiz_test_*.db; \
+		echo "$(GREEN)$(CHECK) Test database files cleaned$(RESET)"; \
+	else \
+		echo "$(BLUE)ℹ️  No test database files to clean$(RESET)"; \
+	fi
+
+.PHONY: install-polyfactory
+install-polyfactory: ## 📦 Install or update Polyfactory
+	@echo "$(BOLD)$(BLUE)$(PACKAGE) Installing/updating Polyfactory...$(RESET)"
+	$(UV) add polyfactory
+	@echo "$(GREEN)$(CHECK) Polyfactory installed$(RESET)"
+
+.PHONY: test-factories
+test-factories: ## 🏭 Test factory functionality
+	@echo "$(BOLD)$(BLUE)$(TEST) Testing factory functionality...$(RESET)"
+	$(UV) run python -c "from tests.factories.users import UserModelFactory; print('✅ User factory works:', UserModelFactory.build().username)"
+	$(UV) run python -c "from tests.factories.surveys import SurveyModelFactory; print('✅ Survey factory works:', SurveyModelFactory.build(created_by=1).title)"
+	@echo "$(GREEN)$(CHECK) All factories working correctly$(RESET)"
+
+.PHONY: demo-factories
+demo-factories: ## 🎭 Demonstrate factory capabilities
+	@echo "$(BOLD)$(MAGENTA)$(GEAR) Polyfactory Demo...$(RESET)"
+	@echo ""
+	@echo "$(BOLD)$(BLUE)👥 User Factories:$(RESET)"
+	$(UV) run python -c "\
+from tests.factories.users import UserModelFactory, AdminUserModelFactory, TelegramUserModelFactory; \
+user = UserModelFactory.build(); \
+admin = AdminUserModelFactory.build(); \
+tg_user = TelegramUserModelFactory.build(); \
+print(f'📝 Regular User: {user.username} ({user.email})'); \
+print(f'👑 Admin User: {admin.username} (admin: {admin.is_admin})'); \
+print(f'📱 Telegram User: {tg_user.username} (tg_id: {tg_user.telegram_id})'); \
+"
+	@echo ""
+	@echo "$(BOLD)$(GREEN)📊 Survey Factories:$(RESET)"
+	$(UV) run python -c "\
+from tests.factories.surveys import SurveyModelFactory, PublicSurveyModelFactory; \
+survey = SurveyModelFactory.build(created_by=1); \
+public = PublicSurveyModelFactory.build(created_by=1); \
+print(f'📋 Survey: {survey.title[:50]}...'); \
+print(f'🌍 Public Survey: {public.title[:50]}... (public: {public.is_public})'); \
+"
+	@echo ""
+	@echo "$(BOLD)$(CYAN)🎯 Pydantic Factories:$(RESET)"
+	$(UV) run python -c "\
+from tests.factories.users import UserCreateDataFactory, ValidUserCreateDataFactory; \
+create_data = UserCreateDataFactory.build(); \
+valid_data = ValidUserCreateDataFactory.build(); \
+print(f'📝 Create Data: {create_data.username} ({create_data.email})'); \
+print(f'✅ Valid Data: {valid_data.username} ({valid_data.email})'); \
+"
+	@echo "$(GREEN)$(CHECK) Demo complete! Factories working perfectly$(RESET)"
 
 .PHONY: test-unit
 test-unit: ## Run unit tests only
@@ -153,6 +242,44 @@ test-parallel: ## Run tests in parallel
 test-performance: ## Run performance tests
 	@echo "$(BLUE)$(TEST) Running performance tests...$(RESET)"
 	$(UV) run locust --host=http://localhost:$(BACKEND_PORT)
+
+.PHONY: test-quick
+test-quick:
+	@echo "⚡ Быстрые тесты с timeout..."
+	$(UV) run pytest -xvs --timeout=15 --timeout-method=thread tests/unit/
+
+.PHONY: test-no-hang
+test-no-hang:
+	@echo "🚫 Тесты без зависания (короткий timeout)..."
+	$(UV) run pytest -xvs --timeout=10 --timeout-method=thread --tb=short tests/unit/
+
+.PHONY: test-debug
+test-debug:
+	@echo "🔍 Отладочные тесты..."
+	$(UV) run pytest -xvs --timeout=30 --timeout-method=thread --tb=long --capture=no
+
+.PHONY: test-specific
+test-specific:
+	@echo "🎯 Запуск конкретного теста..."
+	@read -p "Укажите путь к тесту (например: tests/unit/test_auth_router.py::TestLogin::test_login_success): " test_path; \
+	$(UV) run pytest -xvs --timeout=15 --timeout-method=thread "$$test_path"
+
+.PHONY: test-single-router
+test-single-router:
+	@echo "🎯 Тестирование одного роутера..."
+	@read -p "Укажите имя роутера (например: auth, admin, surveys): " router_name; \
+	$(UV) run pytest -xvs --timeout=10 --timeout-method=thread --tb=short tests/unit/test_$${router_name}_router.py
+
+.PHONY: test-ultra-quick
+test-ultra-quick:
+	@echo "⚡ Сверхбыстрое тестирование auth роутера..."
+	$(UV) run pytest -xvs --timeout=5 --timeout-method=thread --tb=short tests/unit/test_auth_router.py
+
+.PHONY: test-one-class
+test-one-class:
+	@echo "🔍 Тестирование одного класса..."
+	@read -p "Укажите путь к классу (например: tests/unit/test_auth_router.py::TestRegistration): " class_path; \
+	$(UV) run pytest -xvs --timeout=8 --timeout-method=thread --tb=short "$$class_path"
 
 # ================================
 # 🔍 CODE QUALITY
@@ -480,3 +607,32 @@ restore-db: ## Restore database from backup
 
 # Make sure we display help if no target is specified
 all: help
+
+# 🚀 БЫСТРОЕ ТЕСТИРОВАНИЕ (без coverage)
+.PHONY: test-fast test-auth-fast test-surveys-fast test-responses-fast test-all-fast
+
+test-fast: ## Быстрые тесты без coverage
+	@echo "🚀 Быстрое тестирование без coverage..."
+	uv run pytest tests/unit/ -v --no-cov --tb=short
+
+test-auth-fast: ## Быстрые тесты auth роутера
+	@echo "🔐 Быстрые тесты auth роутера..."
+	uv run pytest tests/unit/test_auth_router.py -v --no-cov --tb=short
+
+test-surveys-fast: ## Быстрые тесты surveys роутера
+	@echo "📋 Быстрые тесты surveys роутера..."
+	uv run pytest tests/unit/test_surveys_router.py -v --no-cov --tb=short
+
+test-responses-fast: ## Быстрые тесты responses роутера
+	@echo "💬 Быстрые тесты responses роутера..."
+	uv run pytest tests/unit/test_responses_router.py -v --no-cov --tb=short
+
+test-all-fast: ## Быстрые тесты всех роутеров
+	@echo "⚡ Быстрые тесты всех роутеров..."
+	@echo "🔐 Auth Router:"
+	@uv run pytest tests/unit/test_auth_router.py --no-cov --tb=no -q
+	@echo "📋 Surveys Router:"
+	@uv run pytest tests/unit/test_surveys_router.py --no-cov --tb=no -q
+	@echo "💬 Responses Router:"
+	@uv run pytest tests/unit/test_responses_router.py --no-cov --tb=no -q
+	@echo "✅ Быстрое тестирование завершено!"

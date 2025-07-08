@@ -28,7 +28,12 @@ class UserDataFactory(factory.Factory):
 
 
 class TelegramUserDataFactory(UserDataFactory):
-    telegram_user_id = factory.Sequence(lambda n: 1000000 + n)
-    telegram_username = factory.Sequence(lambda n: f"tguser{n}")
-    telegram_first_name = factory.Faker("first_name")
-    telegram_last_name = factory.Faker("last_name")
+    tg_id = factory.Sequence(lambda n: 1000000 + n)
+    telegram_data = factory.LazyAttribute(
+        lambda obj: {
+            "username": f"tguser{obj.tg_id}",
+            "first_name": fake.first_name(),
+            "last_name": fake.last_name(),
+            "language_code": "en",
+        }
+    )

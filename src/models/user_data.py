@@ -1,81 +1,98 @@
 """
 UserData model for the Quiz App.
 
-This module contains the UserData SQLModel for collecting comprehensive
-user information including fingerprinting and Telegram data.
+This module contains the UserData SQLAlchemy model and corresponding Pydantic schemas
+for collecting comprehensive user information including fingerprinting and Telegram data.
 """
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Dict, Optional
 
-from sqlmodel import JSON, Column, Field, Relationship, SQLModel
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import Column, DateTime, Integer, JSON, String, func
+from sqlalchemy.orm import relationship
+
+from database import Base
 
 
-class UserDataBase(SQLModel):
-    """Base UserData model with common fields."""
+class UserData(Base):
+    """UserData database model."""
+
+    __tablename__ = "userdata"
+
+    __table_args__ = {"extend_existing": True}
+    id = Column(Integer, primary_key=True, index=True)
 
     # Session and identification
-    session_id: str = Field(
-        max_length=100, unique=True, index=True, description="Unique session ID"
+    session_id = Column(String(100), unique=True, index=True, nullable=False)
+
+    # Network and browser data
+    ip_address = Column(String(45), nullable=False)
+    user_agent = Column(String(1000), nullable=False)
+    referrer = Column(String(500), nullable=True)
+    entry_page = Column(String(500), nullable=True)
+    fingerprint = Column(String(200), nullable=False)
+
+    # Location data
+    geolocation = Column(JSON, nullable=True)
+
+    # Device and browser information
+    device_info = Column(JSON, nullable=False)
+    browser_info = Column(JSON, nullable=False)
+
+    # Telegram data - only tg_id separately, rest in JSON
+    tg_id = Column(Integer, nullable=True, index=True)
+    telegram_data = Column(JSON, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime, default=func.now(), onupdate=func.now(), nullable=False
     )
+
+    # Relationships
+    responses = relationship(
+        "Response",
+        foreign_keys="Response.user_session_id",
+        primaryjoin="UserData.session_id == Response.user_session_id",
+        back_populates="user_data",
+    )
+
+
+# Pydantic schemas
+class UserDataBase(BaseModel):
+    """Base UserData schema with common fields."""
+
+    # Session and identification
+    session_id: str = Field(max_length=100, description="Unique session ID")
 
     # Network and browser data
     ip_address: str = Field(max_length=45, description="User IP address")
     user_agent: str = Field(max_length=1000, description="Browser user agent")
-    referrer: str | None = Field(
-        default=None, max_length=500, description="Referrer URL"
+    referrer: Optional[str] = Field(None, max_length=500, description="Referrer URL")
+    entry_page: Optional[str] = Field(
+        None, max_length=500, description="Entry page URL"
     )
     fingerprint: str = Field(max_length=200, description="Browser fingerprint")
 
     # Location data
-    geolocation: dict[str, Any] | None = Field(
-        default=None,
-        sa_column=Column(JSON),
-        description="Geolocation data (coordinates, city, etc.)",
+    geolocation: Optional[Dict[str, Any]] = Field(
+        None, description="Geolocation data (coordinates, city, etc.)"
     )
 
     # Device and browser information
-    device_info: dict[str, Any] = Field(
-        sa_column=Column(JSON), description="Device information (screen, OS, etc.)"
+    device_info: Dict[str, Any] = Field(
+        description="Device information (screen, OS, etc.)"
     )
-    browser_info: dict[str, Any] = Field(
-        sa_column=Column(JSON),
-        description="Browser information (language, timezone, etc.)",
-    )
-
-    # Telegram data (optional)
-    telegram_user_id: int | None = Field(default=None, description="Telegram user ID")
-    telegram_username: str | None = Field(
-        default=None, max_length=100, description="Telegram username"
-    )
-    telegram_first_name: str | None = Field(
-        default=None, max_length=100, description="Telegram first name"
-    )
-    telegram_last_name: str | None = Field(
-        default=None, max_length=100, description="Telegram last name"
-    )
-    telegram_language_code: str | None = Field(
-        default=None, max_length=10, description="Telegram language"
-    )
-    telegram_photo_url: str | None = Field(
-        default=None, max_length=500, description="Telegram avatar URL"
+    browser_info: Dict[str, Any] = Field(
+        description="Browser information (language, timezone, etc.)"
     )
 
-
-class UserData(UserDataBase, table=True):
-    """UserData database model."""
-
-    id: int | None = Field(default=None, primary_key=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-
-    # Relationships
-    responses: list["Response"] = Relationship(
-        back_populates="user_data",
-        sa_relationship_kwargs={
-            "foreign_keys": "[Response.user_session_id]",
-            "primaryjoin": "UserData.session_id == Response.user_session_id",
-        },
+    # Telegram data - only tg_id separately, rest in JSON
+    tg_id: Optional[int] = Field(None, description="Telegram user ID")
+    telegram_data: Optional[Dict[str, Any]] = Field(
+        None,
+        description="All Telegram user data in JSON format (flexible for API changes)",
     )
 
 
@@ -85,29 +102,26 @@ class UserDataCreate(UserDataBase):
     pass
 
 
-class UserDataUpdate(SQLModel):
+class UserDataUpdate(BaseModel):
     """Schema for updating existing user data."""
 
     # Network and browser data
-    ip_address: str | None = Field(default=None, max_length=45)
-    user_agent: str | None = Field(default=None, max_length=1000)
-    referrer: str | None = Field(default=None, max_length=500)
-    fingerprint: str | None = Field(default=None, max_length=200)
+    ip_address: Optional[str] = Field(None, max_length=45)
+    user_agent: Optional[str] = Field(None, max_length=1000)
+    referrer: Optional[str] = Field(None, max_length=500)
+    entry_page: Optional[str] = Field(None, max_length=500)
+    fingerprint: Optional[str] = Field(None, max_length=200)
 
     # Location data
-    geolocation: dict[str, Any] | None = Field(default=None)
+    geolocation: Optional[Dict[str, Any]] = None
 
     # Device and browser information
-    device_info: dict[str, Any] | None = Field(default=None)
-    browser_info: dict[str, Any] | None = Field(default=None)
+    device_info: Optional[Dict[str, Any]] = None
+    browser_info: Optional[Dict[str, Any]] = None
 
-    # Telegram data
-    telegram_user_id: int | None = Field(default=None)
-    telegram_username: str | None = Field(default=None, max_length=100)
-    telegram_first_name: str | None = Field(default=None, max_length=100)
-    telegram_last_name: str | None = Field(default=None, max_length=100)
-    telegram_language_code: str | None = Field(default=None, max_length=10)
-    telegram_photo_url: str | None = Field(default=None, max_length=500)
+    # Telegram data - only tg_id separately, rest in JSON
+    tg_id: Optional[int] = None
+    telegram_data: Optional[Dict[str, Any]] = None
 
 
 class UserDataRead(UserDataBase):
@@ -117,28 +131,26 @@ class UserDataRead(UserDataBase):
     created_at: datetime
     updated_at: datetime
 
+    model_config = ConfigDict(from_attributes=True)
+
 
 class UserDataReadWithResponses(UserDataRead):
     """Schema for reading user data with responses included."""
 
-    responses: list["ResponseRead"] = []
+    responses: list = Field(default_factory=list)
+
+    model_config = ConfigDict(from_attributes=True)
 
 
-class UserDataSummary(SQLModel):
+class UserDataSummary(BaseModel):
     """Summary of user data for analytics."""
 
     total_users: int
     unique_ips: int
-    countries: dict[str, int] = Field(
-        sa_column=Column(JSON), description="Country distribution"
-    )
-    devices: dict[str, int] = Field(
-        sa_column=Column(JSON), description="Device type distribution"
-    )
-    browsers: dict[str, int] = Field(
-        sa_column=Column(JSON), description="Browser distribution"
-    )
-    telegram_users: int
+    countries: Dict[str, int] = Field(description="Country distribution")
+    devices: Dict[str, int] = Field(description="Device type distribution")
+    browsers: Dict[str, int] = Field(description="Browser distribution")
+    telegram_users: int = Field(description="Users with Telegram data")
 
 
 # Forward reference imports (avoid circular imports)

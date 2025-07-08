@@ -23,7 +23,7 @@ from models.question import Question
 from models.response import Response
 from models.survey import Survey
 from models.user import User
-from services.jwt_service import create_access_token
+from services.jwt_service import JWTService
 from services.user_service import user_service
 
 logger = logging.getLogger(__name__)
@@ -108,7 +108,13 @@ class TelegramWebAppService:
                 user = await self._create_or_get_user(session, telegram_user)
 
                 # Generate access token
-                access_token = create_access_token({"sub": str(user.id)})
+                jwt_service = JWTService()
+                access_token = jwt_service.create_access_token(
+                    user_id=user.id,
+                    username=user.username,
+                    is_admin=user.is_admin,
+                    telegram_id=user.telegram_id,
+                )
 
                 return {
                     "user": {

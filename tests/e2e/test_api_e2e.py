@@ -174,10 +174,10 @@ async def test_token_verification(api_client):
     if not api_client.auth_token:
         await test_user_registration_and_login(api_client)
 
-    verify_data = {"token": api_client.auth_token}
-
     response = await api_client.client.post(
-        "/api/auth/verify-token", json=verify_data, headers=api_client._headers()
+        "/api/auth/verify-token",
+        params={"token": api_client.auth_token},
+        headers=api_client._headers(),
     )
 
     assert response.status_code == 200
@@ -319,16 +319,14 @@ async def test_user_data_collection(api_client):
         "session_id": api_client.user_session_id,
         "ip_address": "127.0.0.1",
         "user_agent": "E2E Test Agent",
-        "browser_fingerprint": {
-            "canvas": "test_canvas_hash",
-            "webgl": "test_webgl_hash",
-        },
+        "fingerprint": "test_canvas_hash_webgl_hash",
         "device_info": {"screen_width": 1920, "screen_height": 1080, "timezone": "UTC"},
-        "location_data": {"latitude": 55.7558, "longitude": 37.6176, "accuracy": 100},
+        "browser_info": {"language": "en-US", "timezone": "UTC", "platform": "Web"},
+        "geolocation": {"latitude": 55.7558, "longitude": 37.6176, "accuracy": 100},
     }
 
     response = await api_client.client.post(
-        "/api/user-data/session", json=user_data, headers=api_client._headers()
+        "/api/user-data/", json=user_data, headers=api_client._headers()
     )
 
     assert response.status_code in [200, 201, 400]  # 400 если сессия уже существует

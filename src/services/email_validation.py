@@ -113,9 +113,7 @@ class EmailValidationService:
 
         try:
             # Use email-validator for comprehensive format checking
-            validation = validate_email(
-                email, check_deliverability=False  # We'll do this separately
-            )
+            validation = validate_email(email)
 
             result["format_valid"] = True
             result["normalized_email"] = validation.email
@@ -373,7 +371,7 @@ class EmailValidationService:
 email_validator = EmailValidationService()
 
 
-async def validate_email(
+async def validate_email_async(
     email: str, check_mx: bool = True, check_smtp: bool = False
 ) -> dict[str, any]:
     """

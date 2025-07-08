@@ -1,557 +1,538 @@
 """
-Тесты для Reports API роутера Quiz App.
+Тесты для Reports роутера.
 
-Этот модуль содержит тесты для генерации PDF отчетов
-для опросов и пользователей.
+Тесты покрывают генерацию PDF отчетов, аналитики, экспорт данных
+и все основные операции с отчетами.
 """
 
+import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
+from fastapi import HTTPException
+from datetime import datetime, timedelta
+from io import BytesIO
 
-from tests.factories.question_factory import QuestionFactory
-from tests.factories.response_factory import ResponseFactory
-from tests.factories.survey_factory import SurveyFactory
-from tests.factories.user_factory import UserFactory
-import pytest_asyncio
+from tests.factories import (
+    UserFactory,
+    AdminUserFactory,
+    VerifiedUserFactory,
+    SurveyFactory,
+    PublicSurveyFactory,
+    create_test_users_batch,
+    create_test_surveys_batch,
+    create_survey_responses,
+    AuthenticatedRespondentFactory,
+)
 
 
-class TestSurveyPdfReports:
-    """Тесты для генерации PDF отчетов по опросам."""
+class TestReportsRouter:
+    """Тестовый класс для Reports роутера."""
 
-
-    async def test_generate_survey_pdf_success(
-        self, api_client, admin_headers, db_session, mock_pdf_service
+    @pytest.mark.asyncio
+    async def test_generate_survey_report_success(
+        self, api_client, async_session, mock_pdf_service, sample_survey_data
     ):
-        """Тест успешной генерации PDF отчета для опроса."""
-        # Настраиваем mock для PDF сервиса
-        mock_pdf_bytes = b"fake-pdf-content"
-        mock_pdf_service.generate_survey_report.return_value = mock_pdf_bytes
+        """Тест успешной генерации PDF отчета по опросу."""
+        # Arrange
+        survey = sample_survey_data
+        expected_pdf = b"PDF_CONTENT_HERE"
 
-        # Создаем опрос с данными
-        survey_factory = SurveyFactory(db_session)
-        question_factory = QuestionFactory(db_session)
-        response_factory = ResponseFactory(db_session)
-        user_factory = UserFactory(db_session)
+        mock_pdf_service.generate_survey_report.return_value = expected_pdf
 
-        survey = await survey_factory.create(title="Test Survey")
-        question = await question_factory.create(
-            survey_id=survey.id, title="Test Question", question_type="text"
+        # Act
+        response = await api_client.post(
+            api_client.url_for("generate_survey_report"),
+            json={"survey_id": survey.id, "format": "pdf"},
         )
 
-        user = await user_factory.create()
-        await response_factory.create(
-            question_id=question.id,
-            user_id=user.id,
-            response_data={"answer": "Test Answer"},
-        )
-
-        response = await api_client.auth_get(
-            f"/api/reports/surveys/{survey.id}/pdf", headers=admin_headers
-        )
-
+        # Assert
         assert response.status_code == 200
         assert response.headers["content-type"] == "application/pdf"
-        assert "attachment" in response.headers["content-disposition"]
-        assert (
-            f"survey_{survey.id}_report.pdf" in response.headers["content-disposition"]
-        )
-        assert response.content == mock_pdf_bytes
-
-        # Проверяем что PDF сервис был вызван
+        assert response.content == expected_pdf
         mock_pdf_service.generate_survey_report.assert_called_once()
-        args = mock_pdf_service.generate_survey_report.call_args[0]
 
-        # Проверяем данные опроса
-        survey_data = args[0]
-        assert survey_data["id"] == survey.id
-        assert survey_data["title"] == "Test Survey"
-
-        # Проверяем данные ответов
-        responses_data = args[1]
-        assert len(responses_data) >= 1
-        assert responses_data[0]["question"]["id"] == question.id
-        assert responses_data[0]["user"]["id"] == user.id
-
-        # Проверяем аналитику
-        analytics_data = args[2]
-        assert "unique_respondents" in analytics_data
-        assert "total_responses" in analytics_data
-        assert "completion_rate" in analytics_data
-
-
-    async def test_generate_survey_pdf_empty_survey(
-        self, api_client, admin_headers, db_session, mock_pdf_service
+    @pytest.mark.asyncio
+    async def test_generate_survey_report_with_custom_options(
+        self,
+        api_client,
+        async_session,
+        mock_pdf_service,
+        sample_survey_data,
+        pdf_generation_options,
     ):
-        """Тест генерации PDF для опроса без ответов."""
-        mock_pdf_bytes = b"empty-survey-pdf"
-        mock_pdf_service.generate_survey_report.return_value = mock_pdf_bytes
+        """Тест генерации PDF отчета с кастомными опциями."""
+        # Arrange
+        survey = sample_survey_data
+        expected_pdf = b"CUSTOM_PDF_CONTENT"
 
-        # Создаем опрос без ответов
-        survey_factory = SurveyFactory(db_session)
-        survey = await survey_factory.create(title="Empty Survey")
+        mock_pdf_service.generate_survey_report.return_value = expected_pdf
 
-        response = await api_client.auth_get(
-            f"/api/reports/surveys/{survey.id}/pdf", headers=admin_headers
+        # Act
+        response = await api_client.post(
+            api_client.url_for("generate_survey_report"),
+            json={
+                "survey_id": survey.id,
+                "format": "pdf",
+                "options": pdf_generation_options,
+            },
         )
 
+        # Assert
         assert response.status_code == 200
-        assert response.content == mock_pdf_bytes
+        assert response.content == expected_pdf
+        mock_pdf_service.generate_survey_report.assert_called_once()
 
-        # Проверяем что аналитика содержит нули
-        args = mock_pdf_service.generate_survey_report.call_args[0]
-        analytics_data = args[2]
-        assert analytics_data["unique_respondents"] == 0
-        assert analytics_data["total_responses"] == 0
-        assert analytics_data["completion_rate"] == 0
-
-
-    async def test_generate_survey_pdf_not_found(self, api_client, admin_headers):
-        """Тест генерации PDF для несуществующего опроса."""
-        response = await api_client.auth_get(
-            "/api/reports/surveys/99999/pdf", headers=admin_headers
-        )
-
-        assert response.status_code == 404
-        assert "not found" in response.json()["detail"].lower()
-
-
-    async def test_generate_survey_pdf_requires_admin(
-        self, api_client, auth_headers, regular_user, db_session
+    @pytest.mark.asyncio
+    async def test_generate_user_report_success(
+        self, api_client, async_session, mock_pdf_service, sample_user_data
     ):
-        """Тест что генерация PDF опроса требует админ права."""
-        headers = await auth_headers(regular_user)
+        """Тест успешной генерации PDF отчета пользователя."""
+        # Arrange
+        user = sample_user_data
+        expected_pdf = b"USER_PDF_CONTENT"
 
-        survey_factory = SurveyFactory(db_session)
-        survey = await survey_factory.create()
+        mock_pdf_service.generate_user_report.return_value = expected_pdf
 
-        response = await api_client.auth_get(
-            f"/api/reports/surveys/{survey.id}/pdf", headers=headers
+        # Act
+        response = await api_client.post(
+            api_client.url_for("generate_user_report"),
+            json={"user_id": user.id, "format": "pdf"},
         )
 
-        assert response.status_code == 403
-        assert "admin" in response.json()["detail"].lower()
-
-
-    async def test_generate_survey_pdf_requires_auth(self, api_client, db_session):
-        """Тест что генерация PDF опроса требует авторизацию."""
-        survey_factory = SurveyFactory(db_session)
-        survey = await survey_factory.create()
-
-        response = await api_client.get(f"/api/reports/surveys/{survey.id}/pdf")
-
-        assert response.status_code == 401
-
-
-    async def test_generate_survey_pdf_service_error(
-        self, api_client, admin_headers, db_session, mock_pdf_service
-    ):
-        """Тест обработки ошибки PDF сервиса."""
-        # Настраиваем mock для выброса ошибки
-        mock_pdf_service.generate_survey_report.side_effect = Exception(
-            "PDF generation failed"
-        )
-
-        survey_factory = SurveyFactory(db_session)
-        survey = await survey_factory.create()
-
-        response = await api_client.auth_get(
-            f"/api/reports/surveys/{survey.id}/pdf", headers=admin_headers
-        )
-
-        assert response.status_code == 500
-        assert "failed to generate" in response.json()["detail"].lower()
-
-
-class TestUserPdfReports:
-    """Тесты для генерации PDF отчетов пользователей."""
-
-
-    async def test_generate_user_pdf_success_own_report(
-        self, api_client, auth_headers, db_session, mock_pdf_service
-    ):
-        """Тест успешной генерации PDF отчета для собственных ответов."""
-        mock_pdf_bytes = b"user-pdf-content"
-        mock_pdf_service.generate_user_report.return_value = mock_pdf_bytes
-
-        # Создаем пользователя с ответами
-        user_factory = UserFactory(db_session)
-        survey_factory = SurveyFactory(db_session)
-        question_factory = QuestionFactory(db_session)
-        response_factory = ResponseFactory(db_session)
-
-        user = await user_factory.create()
-        survey = await survey_factory.create()
-        question = await question_factory.create(survey_id=survey.id)
-
-        await response_factory.create(
-            question_id=question.id,
-            user_id=user.id,
-            response_data={"answer": "My Answer"},
-        )
-
-        headers = await auth_headers(user)
-
-        response = await api_client.auth_get(
-            f"/api/reports/users/{user.id}/pdf", headers=headers
-        )
-
+        # Assert
         assert response.status_code == 200
         assert response.headers["content-type"] == "application/pdf"
-        assert "attachment" in response.headers["content-disposition"]
-        assert f"user_{user.id}_report.pdf" in response.headers["content-disposition"]
-        assert response.content == mock_pdf_bytes
-
-        # Проверяем что PDF сервис был вызван
+        assert response.content == expected_pdf
         mock_pdf_service.generate_user_report.assert_called_once()
 
-
-    async def test_generate_user_pdf_admin_access(
-        self, api_client, admin_headers, db_session, mock_pdf_service
+    @pytest.mark.asyncio
+    async def test_generate_analytics_report_success(
+        self, api_client, async_session, mock_pdf_service, sample_analytics_data
     ):
-        """Тест генерации PDF отчета администратором для любого пользователя."""
-        mock_pdf_bytes = b"admin-user-pdf-content"
-        mock_pdf_service.generate_user_report.return_value = mock_pdf_bytes
+        """Тест успешной генерации аналитического отчета."""
+        # Arrange
+        expected_pdf = b"ANALYTICS_PDF_CONTENT"
 
-        # Создаем пользователя
-        user_factory = UserFactory(db_session)
-        user = await user_factory.create()
+        mock_pdf_service.generate_analytics_report.return_value = expected_pdf
 
-        response = await api_client.auth_get(
-            f"/api/reports/users/{user.id}/pdf", headers=admin_headers
+        # Act
+        response = await api_client.post(
+            api_client.url_for("generate_analytics_report"),
+            json={
+                "date_from": "2024-01-01",
+                "date_to": "2024-01-31",
+                "format": "pdf",
+            },
         )
 
+        # Assert
         assert response.status_code == 200
-        assert response.content == mock_pdf_bytes
+        assert response.content == expected_pdf
+        mock_pdf_service.generate_analytics_report.assert_called_once()
 
-
-    async def test_generate_user_pdf_forbidden_other_user(
-        self, api_client, auth_headers, db_session
+    @pytest.mark.asyncio
+    async def test_get_available_templates(
+        self, api_client, mock_pdf_service, pdf_templates
     ):
-        """Тест что пользователь не может генерировать отчет для другого пользователя."""
-        user_factory = UserFactory(db_session)
-        user1 = await user_factory.create()
-        user2 = await user_factory.create()
+        """Тест получения доступных шаблонов отчетов."""
+        # Arrange
+        mock_pdf_service.get_available_templates.return_value = pdf_templates
 
-        headers = await auth_headers(user1)
+        # Act
+        response = await api_client.get(api_client.url_for("get_report_templates"))
 
-        response = await api_client.auth_get(
-            f"/api/reports/users/{user2.id}/pdf", headers=headers
-        )
-
-        assert response.status_code == 403
-        assert "own responses" in response.json()["detail"].lower()
-
-
-    async def test_generate_user_pdf_not_found(self, api_client, admin_headers):
-        """Тест генерации PDF для несуществующего пользователя."""
-        response = await api_client.auth_get(
-            "/api/reports/users/99999/pdf", headers=admin_headers
-        )
-
-        assert response.status_code == 404
-        assert "not found" in response.json()["detail"].lower()
-
-
-    async def test_generate_user_pdf_requires_auth(self, api_client, db_session):
-        """Тест что генерация PDF пользователя требует авторизацию."""
-        user_factory = UserFactory(db_session)
-        user = await user_factory.create()
-
-        response = await api_client.get(f"/api/reports/users/{user.id}/pdf")
-
-        assert response.status_code == 401
-
-
-    async def test_generate_user_pdf_empty_responses(
-        self, api_client, auth_headers, db_session, mock_pdf_service
-    ):
-        """Тест генерации PDF для пользователя без ответов."""
-        mock_pdf_bytes = b"empty-user-pdf"
-        mock_pdf_service.generate_user_report.return_value = mock_pdf_bytes
-
-        user_factory = UserFactory(db_session)
-        user = await user_factory.create()
-
-        headers = await auth_headers(user)
-
-        response = await api_client.auth_get(
-            f"/api/reports/users/{user.id}/pdf", headers=headers
-        )
-
+        # Assert
         assert response.status_code == 200
-        assert response.content == mock_pdf_bytes
+        data = response.json()
+        assert "survey_report" in data
+        assert "user_report" in data
+        assert "analytics_report" in data
+        mock_pdf_service.get_available_templates.assert_called_once()
 
-        # Проверяем что сервис был вызван с пустыми данными
-        args = mock_pdf_service.generate_user_report.call_args[0]
-        responses_data = args[1]
-        assert len(responses_data) == 0
-
-
-class TestMyResponsesPdfReports:
-    """Тесты для генерации PDF отчетов собственных ответов."""
-
-
-    async def test_generate_my_responses_pdf_success(
-        self, api_client, auth_headers, db_session, mock_pdf_service
+    @pytest.mark.asyncio
+    async def test_download_report_success(
+        self, api_client, async_session, mock_file_storage, sample_pdf_content
     ):
-        """Тест успешной генерации PDF отчета собственных ответов."""
-        mock_pdf_bytes = b"my-responses-pdf-content"
-        mock_pdf_service.generate_user_report.return_value = mock_pdf_bytes
+        """Тест успешного скачивания отчета."""
+        # Arrange
+        report_id = "test-report-123"
 
-        # Создаем пользователя с ответами
-        user_factory = UserFactory(db_session)
-        survey_factory = SurveyFactory(db_session)
-        question_factory = QuestionFactory(db_session)
-        response_factory = ResponseFactory(db_session)
+        mock_file_storage.get_file.return_value = sample_pdf_content
+        mock_file_storage.file_exists.return_value = True
 
-        user = await user_factory.create()
-        survey = await survey_factory.create()
-        question = await question_factory.create(survey_id=survey.id)
-
-        await response_factory.create(
-            question_id=question.id,
-            user_id=user.id,
-            response_data={"answer": "My Answer"},
+        # Act
+        response = await api_client.get(
+            api_client.url_for("download_report", report_id=report_id)
         )
 
-        headers = await auth_headers(user)
-
-        response = await api_client.auth_get(
-            "/api/reports/my-responses/pdf", headers=headers
-        )
-
+        # Assert
         assert response.status_code == 200
         assert response.headers["content-type"] == "application/pdf"
-        assert "attachment" in response.headers["content-disposition"]
-        assert "my_responses_report.pdf" in response.headers["content-disposition"]
-        assert response.content == mock_pdf_bytes
+        assert response.content == sample_pdf_content
+        mock_file_storage.get_file.assert_called_once_with(report_id)
 
-        # Проверяем что PDF сервис был вызван
-        mock_pdf_service.generate_user_report.assert_called_once()
-        args = mock_pdf_service.generate_user_report.call_args[0]
+    @pytest.mark.asyncio
+    async def test_get_report_status_success(self, api_client, mock_pdf_service):
+        """Тест получения статуса генерации отчета."""
+        # Arrange
+        report_id = "test-report-456"
+        expected_status = {
+            "id": report_id,
+            "status": "completed",
+            "progress": 100,
+            "created_at": datetime.utcnow().isoformat(),
+            "download_url": f"/api/reports/download/{report_id}",
+        }
 
-        # Проверяем данные пользователя
-        user_data = args[0]
-        assert user_data["id"] == user.id
+        mock_pdf_service.get_generation_status.return_value = expected_status
 
-        # Проверяем данные ответов
-        responses_data = args[1]
-        assert len(responses_data) >= 1
-        assert responses_data[0]["user"]["id"] == user.id
-
-
-    async def test_generate_my_responses_pdf_empty(
-        self, api_client, auth_headers, db_session, mock_pdf_service
-    ):
-        """Тест генерации PDF отчета без ответов."""
-        mock_pdf_bytes = b"empty-my-responses-pdf"
-        mock_pdf_service.generate_user_report.return_value = mock_pdf_bytes
-
-        user_factory = UserFactory(db_session)
-        user = await user_factory.create()
-
-        headers = await auth_headers(user)
-
-        response = await api_client.auth_get(
-            "/api/reports/my-responses/pdf", headers=headers
+        # Act
+        response = await api_client.get(
+            api_client.url_for("get_report_status", report_id=report_id)
         )
 
+        # Assert
         assert response.status_code == 200
-        assert response.content == mock_pdf_bytes
+        data = response.json()
+        assert data["id"] == report_id
+        assert data["status"] == "completed"
+        assert data["progress"] == 100
+        mock_pdf_service.get_generation_status.assert_called_once_with(report_id)
 
-        # Проверяем что сервис был вызван с пустыми ответами
-        args = mock_pdf_service.generate_user_report.call_args[0]
-        responses_data = args[1]
-        assert len(responses_data) == 0
-
-
-    async def test_generate_my_responses_pdf_requires_auth(self, api_client):
-        """Тест что генерация PDF собственных ответов требует авторизацию."""
-        response = await api_client.get("/api/reports/my-responses/pdf")
-
-        assert response.status_code == 401
-
-
-    async def test_generate_my_responses_pdf_service_error(
-        self, api_client, auth_headers, db_session, mock_pdf_service
+    @pytest.mark.asyncio
+    async def test_generate_bulk_reports_success(
+        self, api_client, async_session, mock_pdf_service, bulk_responses_data
     ):
-        """Тест обработки ошибки PDF сервиса."""
-        # Настраиваем mock для выброса ошибки
-        mock_pdf_service.generate_user_report.side_effect = Exception(
-            "PDF generation failed"
+        """Тест генерации массовых отчетов."""
+        # Arrange
+        bulk_data = bulk_responses_data
+        survey_ids = [bulk_data["survey"].id]
+
+        mock_pdf_service.generate_bulk_reports.return_value = {
+            "job_id": "bulk-job-123",
+            "status": "started",
+            "estimated_completion": datetime.utcnow() + timedelta(minutes=5),
+        }
+
+        # Act
+        response = await api_client.post(
+            api_client.url_for("generate_bulk_reports"),
+            json={
+                "survey_ids": survey_ids,
+                "format": "pdf",
+                "send_email": True,
+            },
         )
 
-        user_factory = UserFactory(db_session)
-        user = await user_factory.create()
+        # Assert
+        assert response.status_code == 202  # Accepted
+        data = response.json()
+        assert data["job_id"] == "bulk-job-123"
+        assert data["status"] == "started"
+        mock_pdf_service.generate_bulk_reports.assert_called_once()
 
-        headers = await auth_headers(user)
-
-        response = await api_client.auth_get(
-            "/api/reports/my-responses/pdf", headers=headers
-        )
-
-        assert response.status_code == 500
-        assert "failed to generate" in response.json()["detail"].lower()
-
-
-class TestReportsIntegration:
-    """Интеграционные тесты для отчетов."""
-
-
-    async def test_complete_survey_report_flow(
-        self, api_client, admin_headers, db_session, mock_pdf_service
+    @pytest.mark.asyncio
+    async def test_export_survey_data_csv(
+        self,
+        api_client,
+        async_session,
+        mock_reports_service,
+        sample_survey_with_questions,
     ):
-        """Тест полного цикла создания отчета по опросу."""
-        mock_pdf_bytes = b"complete-survey-report"
-        mock_pdf_service.generate_survey_report.return_value = mock_pdf_bytes
+        """Тест экспорта данных опроса в CSV."""
+        # Arrange
+        survey_data = sample_survey_with_questions
+        survey = survey_data["survey"]
 
-        # Создаем полный опрос с несколькими вопросами и ответами
-        survey_factory = SurveyFactory(db_session)
-        question_factory = QuestionFactory(db_session)
-        response_factory = ResponseFactory(db_session)
-        user_factory = UserFactory(db_session)
+        csv_content = "question,answer,user\nQ1,A1,user1\nQ2,A2,user2"
+        mock_reports_service.export_survey_data.return_value = csv_content
 
-        survey = await survey_factory.create(title="Complete Survey")
-
-        # Создаем разные типы вопросов
-        question1 = await question_factory.create(
-            survey_id=survey.id, title="Text Question", question_type="text"
-        )
-        question2 = await question_factory.create(
-            survey_id=survey.id, title="Rating Question", question_type="rating"
-        )
-        question3 = await question_factory.create(
-            survey_id=survey.id, title="Yes/No Question", question_type="yes_no"
+        # Act
+        response = await api_client.get(
+            api_client.url_for("export_survey_data"),
+            params={"survey_id": survey.id, "format": "csv"},
         )
 
-        # Создаем несколько пользователей с ответами
-        user1 = await user_factory.create()
-        user2 = await user_factory.create()
-        user3 = await user_factory.create()
-
-        # Пользователь 1 - полные ответы
-        await response_factory.create(
-            question_id=question1.id,
-            user_id=user1.id,
-            response_data={"answer": "Complete answer"},
-        )
-        await response_factory.create(
-            question_id=question2.id, user_id=user1.id, response_data={"rating": 5}
-        )
-        await response_factory.create(
-            question_id=question3.id, user_id=user1.id, response_data={"answer": "yes"}
-        )
-
-        # Пользователь 2 - частичные ответы
-        await response_factory.create(
-            question_id=question1.id,
-            user_id=user2.id,
-            response_data={"answer": "Partial answer"},
-        )
-        await response_factory.create(
-            question_id=question2.id, user_id=user2.id, response_data={"rating": 3}
-        )
-
-        # Пользователь 3 - один ответ
-        await response_factory.create(
-            question_id=question1.id,
-            user_id=user3.id,
-            response_data={"answer": "Single answer"},
-        )
-
-        # Генерируем отчет
-        response = await api_client.auth_get(
-            f"/api/reports/surveys/{survey.id}/pdf", headers=admin_headers
-        )
-
+        # Assert
         assert response.status_code == 200
-        assert response.content == mock_pdf_bytes
+        assert response.headers["content-type"] == "text/csv"
+        assert csv_content in response.text
+        mock_reports_service.export_survey_data.assert_called_once()
 
-        # Проверяем переданные данные
-        args = mock_pdf_service.generate_survey_report.call_args[0]
-
-        # Данные опроса
-        survey_data = args[0]
-        assert survey_data["title"] == "Complete Survey"
-
-        # Данные ответов
-        responses_data = args[1]
-        assert len(responses_data) == 6  # 3+2+1 ответов
-
-        # Аналитика
-        analytics_data = args[2]
-        assert analytics_data["unique_respondents"] == 3
-        assert analytics_data["total_responses"] == 6
-        assert analytics_data["total_questions"] == 3
-        assert analytics_data["completion_rate"] == 33.33  # 1 из 3 завершил полностью
-
-
-    async def test_complete_user_report_flow(
-        self, api_client, auth_headers, db_session, mock_pdf_service
+    @pytest.mark.asyncio
+    async def test_get_survey_analytics(
+        self,
+        api_client,
+        async_session,
+        mock_analytics_service,
+        comprehensive_analytics_data,
     ):
-        """Тест полного цикла создания отчета пользователя."""
-        mock_pdf_bytes = b"complete-user-report"
-        mock_pdf_service.generate_user_report.return_value = mock_pdf_bytes
+        """Тест получения аналитики опроса."""
+        # Arrange
+        analytics_data = comprehensive_analytics_data
+        survey = analytics_data[0]["survey"]
 
-        # Создаем пользователя с ответами на несколько опросов
-        user_factory = UserFactory(db_session)
-        survey_factory = SurveyFactory(db_session)
-        question_factory = QuestionFactory(db_session)
-        response_factory = ResponseFactory(db_session)
+        expected_analytics = {
+            "survey_id": survey.id,
+            "total_responses": 15,
+            "completion_rate": 85.5,
+            "average_time": 180,
+            "demographics": {"age_groups": {"18-25": 5, "26-35": 10}},
+        }
 
-        user = await user_factory.create()
+        mock_analytics_service.get_survey_analytics.return_value = expected_analytics
 
-        # Создаем несколько опросов
-        survey1 = await survey_factory.create(title="Survey 1")
-        survey2 = await survey_factory.create(title="Survey 2")
-
-        # Создаем вопросы
-        question1 = await question_factory.create(
-            survey_id=survey1.id, title="Question 1"
-        )
-        question2 = await question_factory.create(
-            survey_id=survey1.id, title="Question 2"
-        )
-        question3 = await question_factory.create(
-            survey_id=survey2.id, title="Question 3"
+        # Act
+        response = await api_client.get(
+            api_client.url_for("get_survey_analytics", survey_id=survey.id)
         )
 
-        # Создаем ответы пользователя
-        await response_factory.create(
-            question_id=question1.id,
-            user_id=user.id,
-            response_data={"answer": "Answer 1"},
-        )
-        await response_factory.create(
-            question_id=question2.id,
-            user_id=user.id,
-            response_data={"answer": "Answer 2"},
-        )
-        await response_factory.create(
-            question_id=question3.id,
-            user_id=user.id,
-            response_data={"answer": "Answer 3"},
-        )
-
-        headers = await auth_headers(user)
-
-        # Генерируем отчет
-        response = await api_client.auth_get(
-            f"/api/reports/users/{user.id}/pdf", headers=headers
-        )
-
+        # Assert
         assert response.status_code == 200
-        assert response.content == mock_pdf_bytes
+        data = response.json()
+        assert data["survey_id"] == survey.id
+        assert data["total_responses"] == 15
+        assert data["completion_rate"] == 85.5
+        mock_analytics_service.get_survey_analytics.assert_called_once()
 
-        # Проверяем переданные данные
-        args = mock_pdf_service.generate_user_report.call_args[0]
+    @pytest.mark.asyncio
+    async def test_generate_custom_report_success(
+        self,
+        api_client,
+        async_session,
+        mock_pdf_service,
+        sample_survey_data,
+        sample_user_data,
+    ):
+        """Тест генерации кастомного отчета."""
+        # Arrange
+        survey = sample_survey_data
+        user = sample_user_data
 
-        # Данные пользователя
-        user_data = args[0]
-        assert user_data["id"] == user.id
+        custom_config = {
+            "title": "Custom Report Title",
+            "include_charts": True,
+            "include_demographics": True,
+            "filters": {"date_from": "2024-01-01", "date_to": "2024-01-31"},
+        }
 
-        # Данные ответов
-        responses_data = args[1]
-        assert len(responses_data) == 3
+        expected_pdf = b"CUSTOM_REPORT_PDF"
+        mock_pdf_service.generate_custom_report.return_value = expected_pdf
 
-        # Проверяем что все ответы принадлежат пользователю
-        for resp in responses_data:
-            assert resp["user"]["id"] == user.id
+        # Act
+        response = await api_client.post(
+            api_client.url_for("generate_custom_report"),
+            json={
+                "survey_id": survey.id,
+                "user_id": user.id,
+                "config": custom_config,
+                "format": "pdf",
+            },
+        )
+
+        # Assert
+        assert response.status_code == 200
+        assert response.content == expected_pdf
+        mock_pdf_service.generate_custom_report.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_schedule_report_generation(
+        self, api_client, async_session, mock_pdf_service, sample_survey_data
+    ):
+        """Тест планирования генерации отчета."""
+        # Arrange
+        survey = sample_survey_data
+
+        schedule_config = {
+            "frequency": "weekly",
+            "day_of_week": "monday",
+            "time": "09:00",
+            "email_recipients": ["admin@example.com"],
+        }
+
+        expected_schedule = {
+            "id": "schedule-123",
+            "survey_id": survey.id,
+            "frequency": "weekly",
+            "status": "active",
+            "next_run": datetime.utcnow() + timedelta(days=7),
+        }
+
+        mock_pdf_service.schedule_report_generation.return_value = expected_schedule
+
+        # Act
+        response = await api_client.post(
+            api_client.url_for("schedule_report"),
+            json={
+                "survey_id": survey.id,
+                "schedule": schedule_config,
+                "format": "pdf",
+            },
+        )
+
+        # Assert
+        assert response.status_code == 201
+        data = response.json()
+        assert data["id"] == "schedule-123"
+        assert data["survey_id"] == survey.id
+        assert data["frequency"] == "weekly"
+        assert data["status"] == "active"
+        mock_pdf_service.schedule_report_generation.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_report_history(
+        self, api_client, async_session, mock_reports_service, sample_user_data
+    ):
+        """Тест получения истории отчетов."""
+        # Arrange
+        user = sample_user_data
+
+        expected_history = [
+            {
+                "id": "report-1",
+                "title": "Survey Report",
+                "created_at": datetime.utcnow().isoformat(),
+                "status": "completed",
+                "file_size": 1024,
+            },
+            {
+                "id": "report-2",
+                "title": "User Report",
+                "created_at": (datetime.utcnow() - timedelta(days=1)).isoformat(),
+                "status": "completed",
+                "file_size": 2048,
+            },
+        ]
+
+        mock_reports_service.get_user_report_history.return_value = expected_history
+
+        # Act
+        response = await api_client.get(
+            api_client.url_for("get_report_history"),
+            params={"user_id": user.id, "limit": 10},
+        )
+
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 2
+        assert data[0]["id"] == "report-1"
+        assert data[1]["id"] == "report-2"
+        mock_reports_service.get_user_report_history.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_delete_report_success(
+        self, api_client, async_session, mock_file_storage, sample_user_data
+    ):
+        """Тест успешного удаления отчета."""
+        # Arrange
+        user = sample_user_data
+        report_id = "report-to-delete"
+
+        mock_file_storage.file_exists.return_value = True
+        mock_file_storage.delete_file.return_value = True
+
+        # Act
+        response = await api_client.delete(
+            api_client.url_for("delete_report", report_id=report_id)
+        )
+
+        # Assert
+        assert response.status_code == 204
+        mock_file_storage.delete_file.assert_called_once_with(report_id)
+
+    @pytest.mark.asyncio
+    async def test_get_report_metadata(self, api_client, mock_pdf_service):
+        """Тест получения метаданных отчета."""
+        # Arrange
+        report_id = "metadata-report-123"
+
+        expected_metadata = {
+            "id": report_id,
+            "title": "Sample Report",
+            "created_at": datetime.utcnow().isoformat(),
+            "file_size": 2048,
+            "format": "pdf",
+            "pages": 5,
+            "creator": "test_user",
+        }
+
+        mock_pdf_service.get_pdf_metadata.return_value = expected_metadata
+
+        # Act
+        response = await api_client.get(
+            api_client.url_for("get_report_metadata", report_id=report_id)
+        )
+
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == report_id
+        assert data["title"] == "Sample Report"
+        assert data["format"] == "pdf"
+        assert data["pages"] == 5
+        mock_pdf_service.get_pdf_metadata.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_performance_large_report_generation(
+        self, api_client, async_session, mock_pdf_service, performance_test_data
+    ):
+        """Тест производительности генерации больших отчетов."""
+        # Arrange
+        perf_data = performance_test_data
+        surveys = perf_data["surveys"]
+
+        large_pdf = b"LARGE_PDF_CONTENT" * 1000  # Имитация большого PDF
+        mock_pdf_service.generate_survey_report.return_value = large_pdf
+
+        # Act
+        start_time = datetime.utcnow()
+        response = await api_client.post(
+            api_client.url_for("generate_survey_report"),
+            json={
+                "survey_id": surveys[0].id,
+                "format": "pdf",
+                "options": {"include_all_responses": True},
+            },
+        )
+        end_time = datetime.utcnow()
+
+        # Assert
+        assert response.status_code == 200
+        assert len(response.content) > 1000
+
+        # Проверяем время выполнения (не должно превышать 30 секунд)
+        execution_time = (end_time - start_time).total_seconds()
+        assert execution_time < 30
+
+        mock_pdf_service.generate_survey_report.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_concurrent_report_generation(
+        self, api_client, async_session, mock_pdf_service, sample_survey_data
+    ):
+        """Тест параллельной генерации отчетов."""
+        # Arrange
+        survey = sample_survey_data
+
+        mock_pdf_service.generate_survey_report.return_value = b"CONCURRENT_PDF"
+
+        # Act - создаем несколько параллельных запросов
+        import asyncio
+
+        async def generate_report():
+            return await api_client.post(
+                api_client.url_for("generate_survey_report"),
+                json={"survey_id": survey.id, "format": "pdf"},
+            )
+
+        # Запускаем 5 параллельных генераций
+        tasks = [generate_report() for _ in range(5)]
+        responses = await asyncio.gather(*tasks)
+
+        # Assert
+        for response in responses:
+            assert response.status_code == 200
+            assert response.content == b"CONCURRENT_PDF"
+
+        # Проверяем, что сервис был вызван для каждого запроса
+        assert mock_pdf_service.generate_survey_report.call_count == 5

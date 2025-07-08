@@ -1,18 +1,37 @@
 """
 Database configuration and connection management.
 
-This module sets up SQLModel with async SQLite support and provides
+This module sets up SQLAlchemy with declarative base and provides
 database session management for the application.
 """
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+from sqlalchemy import MetaData
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
-from sqlmodel import SQLModel
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from config import settings
+
+# Create metadata with naming convention for better constraint names
+metadata = MetaData(
+    naming_convention={
+        "ix": "ix_%(column_0_label)s",
+        "uq": "uq_%(table_name)s_%(column_0_name)s",
+        "ck": "ck_%(table_name)s_%(constraint_name)s",
+        "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+        "pk": "pk_%(table_name)s",
+    }
+)
+
+
+# Create declarative base for SQLAlchemy 2.0+
+class Base(DeclarativeBase):
+    """Base class for all database models."""
+
+    metadata = metadata
+
 
 # Create async engine
 engine = create_async_engine(
@@ -37,7 +56,7 @@ AsyncSessionLocal = sessionmaker(
 async def create_db_and_tables() -> None:
     """Create database tables."""
     async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
+        await conn.run_sync(Base.metadata.create_all)
 
 
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:

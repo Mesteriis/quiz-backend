@@ -6,24 +6,38 @@ including public and private surveys with access token support.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
+from datetime import datetime
 
-from database import get_async_session
-from models import (
-    Question,
-    QuestionRead,
+from models.question import Question, QuestionRead
+from models.survey import (
     Survey,
+    SurveyCreate,
+    SurveyRead,
     SurveyReadWithQuestions,
+    SurveyUpdate,
 )
+from models.user import User
+from repositories.dependencies import (
+    get_survey_repository,
+    get_question_repository,
+    get_user_repository,
+)
+from repositories.survey import SurveyRepository
+from repositories.question import QuestionRepository
+from repositories.user import UserRepository
+from routers.auth import get_current_user
 
 router = APIRouter()
+security = HTTPBearer()
 
 
 @router.get("/active", response_model=list[dict])
 async def get_active_public_surveys(
-    session: AsyncSession = Depends(get_async_session),
+    survey_repo: SurveyRepository = Depends(get_survey_repository),
+    question_repo: QuestionRepository = Depends(get_question_repository),
     skip: int = Query(0, ge=0, description="Skip surveys"),
     limit: int = Query(10, ge=1, le=100, description="Limit results"),
 ):
@@ -34,23 +48,15 @@ async def get_active_public_surveys(
     Private surveys are not included in this endpoint.
     """
     try:
-        # Query for active public surveys with questions loaded
-        stmt = (
-            select(Survey)
-            .options(selectinload(Survey.questions))
-            .where(Survey.is_active == True)
-            .where(Survey.is_public == True)
-            .offset(skip)
-            .limit(limit)
-            .order_by(Survey.created_at.desc())
-        )
-
-        result = await session.execute(stmt)
-        surveys = result.scalars().all()
+        # Query for active public surveys using repository method
+        surveys = await survey_repo.get_active_public_surveys(skip=skip, limit=limit)
 
         # Convert to dict with questions count
         survey_list = []
         for survey in surveys:
+            # Get questions for this survey
+            questions = await question_repo.get_by_survey_id(survey.id)
+
             survey_dict = {
                 "id": survey.id,
                 "title": survey.title,
@@ -65,8 +71,8 @@ async def get_active_public_surveys(
                 "updated_at": survey.updated_at.isoformat()
                 if survey.updated_at
                 else None,
-                "questions": survey.questions,
-                "questions_count": len(survey.questions) if survey.questions else 0,
+                "questions": [QuestionRead.model_validate(q) for q in questions],
+                "questions_count": len(questions),
             }
             survey_list.append(survey_dict)
 
@@ -80,7 +86,9 @@ async def get_active_public_surveys(
 
 @router.get("/{survey_id}", response_model=SurveyReadWithQuestions)
 async def get_survey_by_id(
-    survey_id: int, session: AsyncSession = Depends(get_async_session)
+    survey_id: int,
+    survey_repo: SurveyRepository = Depends(get_survey_repository),
+    question_repo: QuestionRepository = Depends(get_question_repository),
 ):
     """
     Get a specific public survey by ID.
@@ -89,27 +97,31 @@ async def get_survey_by_id(
     For private surveys, use the access token endpoint.
     """
     try:
-        # Query for the survey with questions
-        stmt = (
-            select(Survey)
-            .options(selectinload(Survey.questions))
-            .where(Survey.id == survey_id)
-            .where(Survey.is_public == True)
-            .where(Survey.is_active == True)
-        )
-
-        result = await session.execute(stmt)
-        survey = result.scalar_one_or_none()
+        # Get survey using repository
+        survey = await survey_repo.get(survey_id)
 
         if not survey:
+            raise HTTPException(status_code=404, detail="Survey not found")
+
+        # Check if survey is public and active
+        if not survey.is_public or not survey.is_active:
             raise HTTPException(
                 status_code=404, detail="Survey not found or not publicly accessible"
             )
 
-        # Sort questions by order
-        survey.questions.sort(key=lambda q: q.order)
+        # Get questions for this survey
+        questions = await question_repo.get_by_survey_id(survey_id)
 
-        return survey
+        # Sort questions by order
+        questions.sort(key=lambda q: q.order)
+
+        # Create response with questions
+        survey_with_questions = SurveyReadWithQuestions(
+            **SurveyRead.model_validate(survey).model_dump(),
+            questions=[QuestionRead.model_validate(q).model_dump() for q in questions],
+        )
+
+        return survey_with_questions
 
     except HTTPException:
         raise
@@ -119,7 +131,9 @@ async def get_survey_by_id(
 
 @router.get("/private/{access_token}", response_model=SurveyReadWithQuestions)
 async def get_private_survey(
-    access_token: str, session: AsyncSession = Depends(get_async_session)
+    access_token: str,
+    survey_repo: SurveyRepository = Depends(get_survey_repository),
+    question_repo: QuestionRepository = Depends(get_question_repository),
 ):
     """
     Get a private survey by access token.
@@ -128,26 +142,27 @@ async def get_private_survey(
     Works for both public and private surveys.
     """
     try:
-        # Query for the survey with questions using access token
-        stmt = (
-            select(Survey)
-            .options(selectinload(Survey.questions))
-            .where(Survey.access_token == access_token)
-            .where(Survey.is_active == True)
-        )
+        # Get survey by access token using repository
+        survey = await survey_repo.get_by_access_token(access_token)
 
-        result = await session.execute(stmt)
-        survey = result.scalar_one_or_none()
-
-        if not survey:
+        if not survey or not survey.is_active:
             raise HTTPException(
                 status_code=404, detail="Survey not found or access token invalid"
             )
 
-        # Sort questions by order
-        survey.questions.sort(key=lambda q: q.order)
+        # Get questions for this survey
+        questions = await question_repo.get_by_survey_id(survey.id)
 
-        return survey
+        # Sort questions by order
+        questions.sort(key=lambda q: q.order)
+
+        # Create response with questions
+        survey_with_questions = SurveyReadWithQuestions(
+            **SurveyRead.model_validate(survey).model_dump(),
+            questions=[QuestionRead.model_validate(q).model_dump() for q in questions],
+        )
+
+        return survey_with_questions
 
     except HTTPException:
         raise
@@ -159,42 +174,34 @@ async def get_private_survey(
 
 @router.get("/{survey_id}/questions", response_model=list[QuestionRead])
 async def get_survey_questions(
-    survey_id: int, session: AsyncSession = Depends(get_async_session)
+    survey_id: int,
+    survey_repo: SurveyRepository = Depends(get_survey_repository),
+    question_repo: QuestionRepository = Depends(get_question_repository),
 ):
     """
     Get all questions for a specific public survey.
 
-    Returns questions ordered by their order field.
-    Only works for public surveys.
+    Returns questions sorted by order.
     """
     try:
-        # First check if survey exists and is public
-        survey_stmt = (
-            select(Survey)
-            .where(Survey.id == survey_id)
-            .where(Survey.is_public == True)
-            .where(Survey.is_active == True)
-        )
-
-        survey_result = await session.execute(survey_stmt)
-        survey = survey_result.scalar_one_or_none()
+        # Check if survey exists and is public
+        survey = await survey_repo.get(survey_id)
 
         if not survey:
+            raise HTTPException(status_code=404, detail="Survey not found")
+
+        if not survey.is_public or not survey.is_active:
             raise HTTPException(
                 status_code=404, detail="Survey not found or not publicly accessible"
             )
 
-        # Query for questions
-        stmt = (
-            select(Question)
-            .where(Question.survey_id == survey_id)
-            .order_by(Question.order)
-        )
+        # Get questions for this survey
+        questions = await question_repo.get_by_survey_id(survey_id)
 
-        result = await session.execute(stmt)
-        questions = result.scalars().all()
+        # Sort questions by order
+        questions.sort(key=lambda q: q.order)
 
-        return questions
+        return [QuestionRead.model_validate(q) for q in questions]
 
     except HTTPException:
         raise
@@ -206,105 +213,72 @@ async def get_survey_questions(
 
 @router.get("/private/{access_token}/questions", response_model=list[QuestionRead])
 async def get_private_survey_questions(
-    access_token: str, session: AsyncSession = Depends(get_async_session)
+    access_token: str,
+    survey_repo: SurveyRepository = Depends(get_survey_repository),
+    question_repo: QuestionRepository = Depends(get_question_repository),
 ):
     """
-    Get all questions for a private survey using access token.
+    Get all questions for a private survey by access token.
 
-    Returns questions ordered by their order field.
-    Works for both public and private surveys.
+    Returns questions sorted by order for surveys accessed via token.
     """
     try:
-        # First check if survey exists using access token
-        survey_stmt = (
-            select(Survey)
-            .where(Survey.access_token == access_token)
-            .where(Survey.is_active == True)
-        )
+        # Get survey by access token
+        survey = await survey_repo.get_by_access_token(access_token)
 
-        survey_result = await session.execute(survey_stmt)
-        survey = survey_result.scalar_one_or_none()
-
-        if not survey:
+        if not survey or not survey.is_active:
             raise HTTPException(
                 status_code=404, detail="Survey not found or access token invalid"
             )
 
-        # Query for questions
-        stmt = (
-            select(Question)
-            .where(Question.survey_id == survey.id)
-            .order_by(Question.order)
-        )
+        # Get questions for this survey
+        questions = await question_repo.get_by_survey_id(survey.id)
 
-        result = await session.execute(stmt)
-        questions = result.scalars().all()
+        # Sort questions by order
+        questions.sort(key=lambda q: q.order)
 
-        return questions
+        return [QuestionRead.model_validate(q) for q in questions]
 
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch private survey questions: {e!s}",
+            status_code=500, detail=f"Failed to fetch private survey questions: {e!s}"
         )
 
 
 @router.get("/{survey_id}/stats")
 async def get_survey_stats(
-    survey_id: int, session: AsyncSession = Depends(get_async_session)
+    survey_id: int,
+    survey_repo: SurveyRepository = Depends(get_survey_repository),
 ):
     """
-    Get basic statistics for a public survey.
+    Get survey statistics.
 
-    Returns response count and completion metrics.
-    Only works for public surveys.
+    Returns basic stats about survey responses and completion.
     """
     try:
-        # First check if survey exists and is public
-        survey_stmt = (
-            select(Survey)
-            .where(Survey.id == survey_id)
-            .where(Survey.is_public == True)
-            .where(Survey.is_active == True)
-        )
-
-        survey_result = await session.execute(survey_stmt)
-        survey = survey_result.scalar_one_or_none()
+        # Check if survey exists and is public
+        survey = await survey_repo.get(survey_id)
 
         if not survey:
+            raise HTTPException(status_code=404, detail="Survey not found")
+
+        if not survey.is_public:
             raise HTTPException(
                 status_code=404, detail="Survey not found or not publicly accessible"
             )
 
-        # Get response count
-        from models import Response
-
-        response_stmt = (
-            select(Response).join(Question).where(Question.survey_id == survey_id)
-        )
-
-        response_result = await session.execute(response_stmt)
-        responses = response_result.scalars().all()
-
-        # Get unique users count
-        unique_users = len(set(r.user_session_id for r in responses))
-
-        # Get questions count
-        question_stmt = select(Question).where(Question.survey_id == survey_id)
-
-        question_result = await session.execute(question_stmt)
-        questions = question_result.scalars().all()
+        # Get survey statistics using repository method
+        stats = await survey_repo.get_survey_stats(survey_id)
 
         return {
             "survey_id": survey_id,
             "survey_title": survey.title,
-            "total_responses": len(responses),
-            "unique_users": unique_users,
-            "total_questions": len(questions),
             "is_active": survey.is_active,
             "is_public": survey.is_public,
+            "created_at": survey.created_at.isoformat() if survey.created_at else None,
+            **stats,
         }
 
     except HTTPException:
@@ -313,3 +287,116 @@ async def get_survey_stats(
         raise HTTPException(
             status_code=500, detail=f"Failed to fetch survey stats: {e!s}"
         )
+
+
+@router.post("/", response_model=SurveyRead, status_code=201)
+async def create_survey(
+    survey_data: SurveyCreate,
+    current_user: User = Depends(get_current_user),
+    survey_repo: SurveyRepository = Depends(get_survey_repository),
+):
+    """
+    Create a new survey (authenticated users only).
+
+    Creates a new survey with the provided data.
+    Only authenticated users can create surveys.
+    """
+    try:
+        # Валидация данных
+        if not survey_data.title or len(survey_data.title.strip()) == 0:
+            raise HTTPException(status_code=422, detail="Survey title is required")
+
+        if len(survey_data.title) > 200:
+            raise HTTPException(
+                status_code=422, detail="Survey title too long (max 200 characters)"
+            )
+
+        # Set created_by to current user
+        survey_data.created_by = current_user.id
+
+        # Генерируем access_token для приватных опросов
+        if not survey_data.is_public and not survey_data.access_token:
+            import secrets
+
+            survey_data.access_token = secrets.token_urlsafe(32)
+
+        # Create survey using repository
+        survey = await survey_repo.create(obj_in=survey_data)
+
+        return SurveyRead.model_validate(survey)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create survey: {e!s}")
+
+
+@router.put("/{survey_id}", response_model=SurveyRead)
+async def update_survey(
+    survey_id: int,
+    survey_data: SurveyUpdate,
+    current_user: User = Depends(get_current_user),
+    survey_repo: SurveyRepository = Depends(get_survey_repository),
+):
+    """
+    Update a survey (authenticated users only).
+
+    Updates survey with new data.
+    Users can only update their own surveys unless they're admin.
+    """
+    try:
+        # Get existing survey
+        survey = await survey_repo.get(survey_id)
+
+        if not survey:
+            raise HTTPException(status_code=404, detail="Survey not found")
+
+        # Check permissions (admin can edit any survey, others only their own)
+        if not current_user.is_admin and survey.created_by != current_user.id:
+            raise HTTPException(
+                status_code=403, detail="Not authorized to update this survey"
+            )
+
+        # Update survey using repository
+        updated_survey = await survey_repo.update(db_obj=survey, obj_in=survey_data)
+
+        return SurveyRead.model_validate(updated_survey)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update survey: {e!s}")
+
+
+@router.delete("/{survey_id}", status_code=204)
+async def delete_survey(
+    survey_id: int,
+    current_user: User = Depends(get_current_user),
+    survey_repo: SurveyRepository = Depends(get_survey_repository),
+):
+    """
+    Delete a survey (authenticated users only).
+
+    Deletes the survey and all associated questions and responses.
+    Users can only delete their own surveys unless they're admin.
+    """
+    try:
+        # Get existing survey
+        survey = await survey_repo.get(survey_id)
+
+        if not survey:
+            raise HTTPException(status_code=404, detail="Survey not found")
+
+        # Check permissions (admin can delete any survey, others only their own)
+        if not current_user.is_admin and survey.created_by != current_user.id:
+            raise HTTPException(
+                status_code=403, detail="Not authorized to delete this survey"
+            )
+
+        # Delete survey using repository
+        await survey_repo.remove(survey_id)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete survey: {e!s}")

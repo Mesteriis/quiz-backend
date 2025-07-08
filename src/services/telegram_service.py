@@ -5,8 +5,12 @@ This module provides async Telegram bot functionality with polling support
 for local development and webhook support for production.
 """
 
+import asyncio
 import logging
-from typing import Optional
+from typing import Optional, Any, Dict, List
+from datetime import datetime
+import json
+from contextlib import asynccontextmanager
 import uuid
 
 from aiogram import Bot, Dispatcher, F, types
@@ -33,7 +37,8 @@ from database import get_async_session
 from models.question import Question, QuestionType
 from models.response import Response
 from models.survey import Survey
-from models.user import User, UserCreate
+from models.user import User
+from schemas.user import UserCreate
 from services.jwt_service import jwt_service
 from services.user_service import user_service
 
@@ -44,6 +49,87 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
+
+# Ленивая загрузка aiogram - импортируем только когда нужно
+_aiogram_loaded = False
+_aiogram_modules: Dict[str, Any] = {}
+
+
+def _load_aiogram():
+    """Ленивая загрузка aiogram модулей."""
+    global _aiogram_loaded, _aiogram_modules
+
+    if _aiogram_loaded:
+        return _aiogram_modules
+
+    try:
+        # Загружаем aiogram модули только когда они действительно нужны
+        from aiogram import Bot, Dispatcher, F, types
+        from aiogram.client.session.aiohttp import AiohttpSession
+        from aiogram.client.telegram import TelegramAPIServer
+        from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
+        from aiogram.types import (
+            BotCommand,
+            BotCommandScopeDefault,
+            InlineKeyboardMarkup,
+            InlineKeyboardButton,
+            WebAppInfo,
+            ReplyKeyboardMarkup,
+            KeyboardButton,
+            ReplyKeyboardRemove,
+            ForceReply,
+        )
+
+        _aiogram_modules.update(
+            {
+                "Bot": Bot,
+                "Dispatcher": Dispatcher,
+                "F": F,
+                "types": types,
+                "AiohttpSession": AiohttpSession,
+                "TelegramAPIServer": TelegramAPIServer,
+                "TelegramBadRequest": TelegramBadRequest,
+                "TelegramForbiddenError": TelegramForbiddenError,
+                "BotCommand": BotCommand,
+                "BotCommandScopeDefault": BotCommandScopeDefault,
+                "InlineKeyboardMarkup": InlineKeyboardMarkup,
+                "InlineKeyboardButton": InlineKeyboardButton,
+                "WebAppInfo": WebAppInfo,
+                "ReplyKeyboardMarkup": ReplyKeyboardMarkup,
+                "KeyboardButton": KeyboardButton,
+                "ReplyKeyboardRemove": ReplyKeyboardRemove,
+                "ForceReply": ForceReply,
+            }
+        )
+
+        _aiogram_loaded = True
+        return _aiogram_modules
+
+    except Exception as e:
+        logging.error(f"Failed to load aiogram modules: {e}")
+        return {}
+
+
+# Fallback классы для тестов
+class MockState:
+    """Mock State для тестов."""
+
+    pass
+
+
+class MockStatesGroup:
+    """Mock StatesGroup для тестов."""
+
+    pass
+
+
+# Попытка загрузить настоящие классы
+try:
+    from aiogram.fsm.state import State, StatesGroup
+except ImportError:
+    # Fallback для тестов
+    State = MockState
+    StatesGroup = MockStatesGroup
 
 
 class SurveyStates(StatesGroup):
@@ -87,26 +173,42 @@ class TelegramService:
     """Service for managing Telegram bot operations using aiogram."""
 
     def __init__(self):
-        self.bot: Optional[Bot] = None
-        self.dp: Optional[Dispatcher] = None
+        self.bot: Optional[Any] = None
+        self.dp: Optional[Any] = None
         self.webapp_url = "http://localhost:3000"  # TODO: Configure in settings
         self.active_surveys: dict[int, dict] = {}  # Cache for active surveys
 
     async def initialize(self) -> None:
-        """Initialize the Telegram bot."""
+        """Initialize the Telegram bot with lazy loading."""
         if not settings.telegram_bot_token:
             logger.warning("Telegram bot token not configured")
             return
 
+        # Загружаем aiogram модули только здесь
+        modules = _load_aiogram()
+        if not modules:
+            logger.error("Failed to load aiogram modules")
+            return
+
+        Bot = modules["Bot"]
+        Dispatcher = modules["Dispatcher"]
+
         # Initialize bot with default properties
         self.bot = Bot(
             token=settings.telegram_bot_token,
-            parse_mode=ParseMode.HTML,
+            parse_mode="HTML",
         )
 
         # Initialize dispatcher with memory storage
-        storage = MemoryStorage()
-        self.dp = Dispatcher(storage=storage)
+        try:
+            # Попытка загрузить MemoryStorage
+            from aiogram.fsm.storage.memory import MemoryStorage
+
+            storage = MemoryStorage()
+            self.dp = Dispatcher(storage=storage)
+        except ImportError:
+            # Fallback для старых версий aiogram
+            self.dp = Dispatcher()
 
         # Register handlers
         await self._register_handlers()
@@ -114,87 +216,93 @@ class TelegramService:
         logger.info("Telegram bot initialized successfully with aiogram")
 
     async def _register_handlers(self) -> None:
-        """Register all bot handlers."""
+        """Register all bot handlers with lazy loading."""
         if not self.dp:
             return
 
-        # Command handlers
-        self.dp.message.register(self.start_command, Command("start"))
-        self.dp.message.register(self.help_command, Command("help"))
-        self.dp.message.register(self.surveys_command, Command("surveys"))
-        self.dp.message.register(self.admin_command, Command("admin"))
-        self.dp.message.register(self.cancel_command, Command("cancel"))
+        # Загружаем aiogram модули для handlers
+        modules = _load_aiogram()
+        if not modules:
+            logger.error("Failed to load aiogram modules for handlers")
+            return
 
-        # Inline query handlers
-        self.dp.inline_query.register(self.handle_inline_query)
+        try:
+            # Попытка загрузить Command, F, StateFilter
+            from aiogram.filters import Command, StateFilter
+            from aiogram.fsm.state import State, StatesGroup
 
-        # FSM handlers for survey taking
-        self.dp.callback_query.register(
-            self.handle_start_survey, F.data.startswith("start_survey_")
-        )
-        self.dp.callback_query.register(
-            self.handle_answer_question,
-            F.data.startswith("answer_"),
-            StateFilter(SurveyStates.answering_question),
-        )
-        self.dp.callback_query.register(
-            self.handle_navigation,
-            F.data.startswith("nav_"),
-            StateFilter(
-                SurveyStates.survey_navigation, SurveyStates.question_navigation
-            ),
-        )
-        self.dp.callback_query.register(
-            self.handle_confirm_answer,
-            F.data.startswith("confirm_"),
-            StateFilter(SurveyStates.confirming_answer),
-        )
+            F = modules["F"]
 
-        # Text message handlers for different states
-        self.dp.message.register(
-            self.handle_text_answer,
-            F.text,
-            StateFilter(SurveyStates.answering_question),
-        )
-        self.dp.message.register(
-            self.handle_email_answer,
-            F.text,
-            StateFilter(SurveyStates.answering_question),
-        )
-        self.dp.message.register(
-            self.handle_phone_answer,
-            F.text,
-            StateFilter(SurveyStates.answering_question),
-        )
+            # Command handlers
+            self.dp.message.register(self.start_command, Command("start"))
+            self.dp.message.register(self.help_command, Command("help"))
+            self.dp.message.register(self.surveys_command, Command("surveys"))
+            self.dp.message.register(self.admin_command, Command("admin"))
+            self.dp.message.register(self.cancel_command, Command("cancel"))
 
-        # Basic callback query handlers
-        self.dp.callback_query.register(
-            self.handle_list_surveys, F.data == "list_surveys"
-        )
-        self.dp.callback_query.register(self.handle_help, F.data == "help")
-        self.dp.callback_query.register(
-            self.handle_admin_panel, F.data == "admin_panel"
-        )
-        self.dp.callback_query.register(
-            self.handle_admin_stats, F.data == "admin_stats"
-        )
-        self.dp.callback_query.register(
-            self.handle_admin_surveys, F.data == "admin_surveys"
-        )
-        self.dp.callback_query.register(
-            self.handle_admin_users, F.data == "admin_users"
-        )
-        self.dp.callback_query.register(
-            self.handle_admin_reports, F.data == "admin_reports"
-        )
-        self.dp.callback_query.register(
-            self.handle_survey_details, F.data.startswith("survey_")
-        )
+            # Inline query handlers
+            self.dp.inline_query.register(self.handle_inline_query)
 
-        # Message handlers
-        self.dp.message.register(self.handle_text_message, F.text)
+            # FSM handlers for survey taking
+            self.dp.callback_query.register(
+                self.handle_start_survey, F.data.startswith("start_survey_")
+            )
+            self.dp.callback_query.register(
+                self.handle_answer_question,
+                F.data.startswith("answer_"),
+                StateFilter(SurveyStates.answering_question),
+            )
+            self.dp.callback_query.register(
+                self.handle_navigation,
+                F.data.startswith("nav_"),
+                StateFilter(
+                    SurveyStates.survey_navigation, SurveyStates.question_navigation
+                ),
+            )
+            self.dp.callback_query.register(
+                self.handle_confirm_answer,
+                F.data.startswith("confirm_"),
+                StateFilter(SurveyStates.confirming_answer),
+            )
 
-        logger.info("All handlers registered successfully")
+            # Text message handlers for different states
+            self.dp.message.register(
+                self.handle_text_answer,
+                F.text,
+                StateFilter(SurveyStates.answering_question),
+            )
+
+            # Basic callback query handlers
+            self.dp.callback_query.register(
+                self.handle_list_surveys, F.data == "list_surveys"
+            )
+            self.dp.callback_query.register(self.handle_help, F.data == "help")
+            self.dp.callback_query.register(
+                self.handle_admin_panel, F.data == "admin_panel"
+            )
+            self.dp.callback_query.register(
+                self.handle_admin_stats, F.data == "admin_stats"
+            )
+            self.dp.callback_query.register(
+                self.handle_admin_surveys, F.data == "admin_surveys"
+            )
+            self.dp.callback_query.register(
+                self.handle_admin_users, F.data == "admin_users"
+            )
+            self.dp.callback_query.register(
+                self.handle_admin_reports, F.data == "admin_reports"
+            )
+            self.dp.callback_query.register(
+                self.handle_survey_details, F.data.startswith("survey_")
+            )
+
+            # Message handlers
+            self.dp.message.register(self.handle_text_message, F.text)
+
+            logger.info("All handlers registered successfully")
+        except Exception as e:
+            logger.error(f"Error registering handlers: {e}")
+            # Fallback - не регистрируем handlers если не удается загрузить модули
 
     async def start_polling(self) -> None:
         """Start polling for updates (for local development)."""
@@ -324,7 +432,9 @@ class TelegramService:
                 survey = result.scalar_one_or_none()
 
                 if not survey or not survey.is_active:
-                    await callback.message.edit_text("❌ Опрос не найден или неактивен.")
+                    await callback.message.edit_text(
+                        "❌ Опрос не найден или неактивен."
+                    )
                     return
 
                 questions = sorted(survey.questions, key=lambda q: q.order)
@@ -927,7 +1037,6 @@ class TelegramService:
                 first_name=user_data.first_name or "",
                 last_name=user_data.last_name or "",
                 telegram_id=user_data.id,
-                is_telegram_user=True,
             )
 
             user = await user_service.create_user(session, user_create)

@@ -161,12 +161,14 @@ class TelegramWebAppData(BaseModel):
 
     user_id: int = Field(..., description="Telegram user ID")
     username: Optional[str] = Field(default=None, description="Telegram username")
-    first_name: str = Field(..., description="User first name")
+    first_name: Optional[str] = Field(default=None, description="User first name")
     last_name: Optional[str] = Field(default=None, description="User last name")
     language_code: Optional[str] = Field(default=None, description="User language code")
     photo_url: Optional[str] = Field(default=None, description="User photo URL")
-    auth_date: int = Field(..., description="Authentication timestamp")
-    hash: str = Field(..., description="Data hash for verification")
+    auth_date: Optional[int] = Field(
+        default=None, description="Authentication timestamp"
+    )
+    hash: Optional[str] = Field(default=None, description="Data hash for verification")
 
 
 class FileUploadRequest(BaseModel):
@@ -207,11 +209,13 @@ class BrowserFingerprint(BaseModel):
     """Schema for browser fingerprint data."""
 
     user_agent: str = Field(..., description="Browser user agent")
-    screen_resolution: str = Field(..., description="Screen resolution")
-    color_depth: int = Field(..., description="Color depth")
-    timezone: str = Field(..., description="Timezone offset")
-    language: str = Field(..., description="Browser language")
-    platform: str = Field(..., description="Operating system")
+    screen_resolution: Optional[str] = Field(
+        default=None, description="Screen resolution"
+    )
+    color_depth: Optional[int] = Field(default=None, description="Color depth")
+    timezone: Optional[str] = Field(default=None, description="Timezone offset")
+    language: Optional[str] = Field(default=None, description="Browser language")
+    platform: Optional[str] = Field(default=None, description="Operating system")
     canvas_fingerprint: Optional[str] = Field(
         default=None, description="Canvas fingerprint"
     )
@@ -223,6 +227,8 @@ class BrowserFingerprint(BaseModel):
     )
     fonts: list[str] = Field(default_factory=list, description="Available fonts")
     plugins: list[str] = Field(default_factory=list, description="Browser plugins")
+    screen_width: Optional[int] = Field(default=None, description="Screen width")
+    screen_height: Optional[int] = Field(default=None, description="Screen height")
 
 
 class GeolocationData(BaseModel):
@@ -243,17 +249,26 @@ class GeolocationData(BaseModel):
 class DeviceInfo(BaseModel):
     """Schema for device information."""
 
-    device_type: str = Field(..., description="Device type (desktop, mobile, tablet)")
-    operating_system: str = Field(..., description="Operating system")
-    browser_name: str = Field(..., description="Browser name")
-    browser_version: str = Field(..., description="Browser version")
-    viewport_width: int = Field(..., description="Viewport width")
-    viewport_height: int = Field(..., description="Viewport height")
-    screen_width: int = Field(..., description="Screen width")
-    screen_height: int = Field(..., description="Screen height")
-    pixel_ratio: float = Field(..., description="Device pixel ratio")
-    touch_support: bool = Field(..., description="Touch support")
+    device_type: Optional[str] = Field(
+        default=None, description="Device type (desktop, mobile, tablet)"
+    )
+    operating_system: Optional[str] = Field(
+        default=None, description="Operating system"
+    )
+    browser_name: Optional[str] = Field(default=None, description="Browser name")
+    browser_version: Optional[str] = Field(default=None, description="Browser version")
+    viewport_width: Optional[int] = Field(default=None, description="Viewport width")
+    viewport_height: Optional[int] = Field(default=None, description="Viewport height")
+    screen_width: Optional[int] = Field(default=None, description="Screen width")
+    screen_height: Optional[int] = Field(default=None, description="Screen height")
+    pixel_ratio: Optional[float] = Field(default=None, description="Device pixel ratio")
+    touch_support: Optional[bool] = Field(default=None, description="Touch support")
     connection_type: Optional[str] = Field(default=None, description="Connection type")
+
+    # Legacy fields for backward compatibility
+    platform: Optional[str] = Field(default=None, description="Platform (legacy)")
+    browser: Optional[str] = Field(default=None, description="Browser (legacy)")
+    version: Optional[str] = Field(default=None, description="Version (legacy)")
 
 
 class UserSessionData(BaseModel):
@@ -269,10 +284,8 @@ class UserSessionData(BaseModel):
         default=None, description="Telegram data"
     )
     referrer: Optional[str] = Field(default=None, description="Referrer URL")
-    entry_page: str = Field(..., description="Entry page URL")
-    timestamp: datetime = Field(
-        default_factory=datetime.utcnow, description="Session start time"
-    )
+    entry_page: Optional[str] = Field(default=None, description="Entry page URL")
+    timestamp: Optional[datetime] = Field(default=None, description="Request timestamp")
 
 
 class ErrorResponse(BaseModel):

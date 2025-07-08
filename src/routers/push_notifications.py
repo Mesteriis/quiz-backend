@@ -1,21 +1,29 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from database import get_async_session
 from models.user import User
+from repositories.dependencies import (
+    get_push_subscription_repository,
+    get_push_notification_repository,
+    get_notification_analytics_repository,
+)
+from repositories.push_notification import (
+    PushSubscriptionRepository,
+    PushNotificationRepository,
+    NotificationAnalyticsRepository,
+)
+from routers.auth import get_current_user
 from schemas.push_notification import (
-    NotificationAnalytics,
+    NotificationAnalyticsCreate,
     NotificationCategoriesUpdate,
-    NotificationStats,
     PushNotificationCreate,
-    PushNotificationResponse,
+    PushNotificationRead,
+    PushNotificationStatsResponse,
     PushSubscriptionCreate,
-    PushSubscriptionResponse,
+    PushSubscriptionRead,
     VapidKeyResponse,
 )
-from services.jwt_service import get_current_user
 from services.push_notification_service import push_service
 
 router = APIRouter(prefix="/notifications", tags=["Push Notifications"])
@@ -40,7 +48,9 @@ async def get_vapid_public_key():
 async def subscribe_to_push_notifications(
     subscription_data: PushSubscriptionCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session),
+    subscription_repo: PushSubscriptionRepository = Depends(
+        get_push_subscription_repository
+    ),
 ):
     """
     Подписаться на push-уведомления
@@ -59,15 +69,18 @@ async def subscribe_to_push_notifications(
                 detail="Неполные данные подписки",
             )
 
-        # Здесь будет сохранение в базу данных
-        # Временная заглушка
-        subscription_id = 1
+        # Создаем подписку через репозиторий
+        new_subscription = await subscription_repo.create_subscription(
+            user_id=current_user.id,
+            endpoint=endpoint,
+            p256dh_key=p256dh_key,
+            auth_key=auth_key,
+        )
 
-        # Сохраняем подписку в localStorage frontend (через ответ)
         return {
             "status": "success",
             "message": "Подписка успешно создана",
-            "subscription_id": str(subscription_id),
+            "subscription_id": str(new_subscription.id),
         }
 
     except HTTPException:
@@ -82,14 +95,16 @@ async def subscribe_to_push_notifications(
 @router.post("/unsubscribe", response_model=dict[str, str])
 async def unsubscribe_from_push_notifications(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session),
+    subscription_repo: PushSubscriptionRepository = Depends(
+        get_push_subscription_repository
+    ),
 ):
     """
     Отписаться от push-уведомлений
     """
     try:
-        # Здесь будет удаление подписки из базы данных
-        # Временная заглушка
+        # Удаляем подписку пользователя через репозиторий
+        await subscription_repo.delete_user_subscriptions(current_user.id)
 
         return {"status": "success", "message": "Подписка успешно удалена"}
 
@@ -104,14 +119,18 @@ async def unsubscribe_from_push_notifications(
 async def update_notification_categories(
     categories_data: NotificationCategoriesUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session),
+    subscription_repo: PushSubscriptionRepository = Depends(
+        get_push_subscription_repository
+    ),
 ):
     """
     Обновить категории уведомлений для пользователя
     """
     try:
-        # Здесь будет обновление категорий в базе данных
-        # Временная заглушка
+        # Обновляем категории через репозиторий
+        await subscription_repo.update_user_categories(
+            current_user.id, categories_data.categories
+        )
 
         return {
             "status": "success",
@@ -129,7 +148,9 @@ async def update_notification_categories(
 @router.post("/test", response_model=dict[str, str])
 async def send_test_notification(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session),
+    subscription_repo: PushSubscriptionRepository = Depends(
+        get_push_subscription_repository
+    ),
 ):
     """
     Отправить тестовое push-уведомление
@@ -145,9 +166,11 @@ async def send_test_notification(
             priority="normal",
         )
 
-        # Отправляем уведомление пользователю
-        result = await push_service.send_to_user(
-            user_id=current_user.id, notification_data=notification_data, db=db
+        # Отправляем уведомление пользователю через репозиторий
+        result = await push_service.send_to_user_via_repo(
+            user_id=current_user.id,
+            notification_data=notification_data,
+            subscription_repo=subscription_repo,
         )
 
         if result["sent"] > 0:
@@ -174,7 +197,9 @@ async def send_notification(
     notification_data: PushNotificationCreate,
     target_user_id: int = None,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session),
+    subscription_repo: PushSubscriptionRepository = Depends(
+        get_push_subscription_repository
+    ),
 ):
     """
     Отправить push-уведомление (только для администраторов)
@@ -202,16 +227,18 @@ async def send_notification(
 
         if target_user_id:
             # Отправляем конкретному пользователю
-            result = await push_service.send_to_user(
+            result = await push_service.send_to_user_via_repo(
                 user_id=target_user_id,
                 notification_data=push_data,
-                db=db,
+                subscription_repo=subscription_repo,
                 categories=[notification_data.category],
             )
         else:
             # Отправляем всем подписчикам категории
-            result = await push_service.send_to_category(
-                category=notification_data.category, notification_data=push_data, db=db
+            result = await push_service.send_to_category_via_repo(
+                category=notification_data.category,
+                notification_data=push_data,
+                subscription_repo=subscription_repo,
             )
 
         return {
@@ -229,14 +256,22 @@ async def send_notification(
 
 @router.post("/analytics", response_model=dict[str, str])
 async def record_notification_analytics(
-    analytics_data: NotificationAnalytics, db: AsyncSession = Depends(get_async_session)
+    analytics_data: NotificationAnalyticsCreate,
+    analytics_repo: NotificationAnalyticsRepository = Depends(
+        get_notification_analytics_repository
+    ),
 ):
     """
     Записать аналитику взаимодействия с уведомлениями
     """
     try:
-        # Здесь будет сохранение аналитики в базу данных
-        # Временная заглушка
+        # Сохраняем аналитику через репозиторий
+        await analytics_repo.record_analytics(
+            notification_id=analytics_data.notification_id,
+            user_id=analytics_data.user_id,
+            action=analytics_data.action,
+            timestamp=analytics_data.timestamp,
+        )
 
         return {"status": "success", "message": "Аналитика записана"}
 
@@ -247,18 +282,24 @@ async def record_notification_analytics(
         )
 
 
-@router.get("/subscriptions", response_model=list[PushSubscriptionResponse])
+@router.get("/subscriptions", response_model=list[PushSubscriptionRead])
 async def get_user_subscriptions(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session),
+    subscription_repo: PushSubscriptionRepository = Depends(
+        get_push_subscription_repository
+    ),
 ):
     """
     Получить список подписок пользователя
     """
     try:
-        # Здесь будет получение подписок из базы данных
-        # Временная заглушка
-        return []
+        # Получаем подписки пользователя через репозиторий
+        subscriptions = await subscription_repo.get_user_subscriptions(current_user.id)
+
+        return [
+            PushSubscriptionRead.model_validate(subscription)
+            for subscription in subscriptions
+        ]
 
     except Exception as e:
         raise HTTPException(
@@ -267,21 +308,32 @@ async def get_user_subscriptions(
         )
 
 
-@router.get("/history", response_model=list[PushNotificationResponse])
+@router.get("/history", response_model=list[PushNotificationRead])
 async def get_notification_history(
     limit: int = 50,
     offset: int = 0,
     category: str = None,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session),
+    notification_repo: PushNotificationRepository = Depends(
+        get_push_notification_repository
+    ),
 ):
     """
     Получить историю уведомлений пользователя
     """
     try:
-        # Здесь будет получение истории из базы данных
-        # Временная заглушка
-        return []
+        # Получаем историю уведомлений через репозиторий
+        notifications = await notification_repo.get_user_notifications(
+            user_id=current_user.id,
+            limit=limit,
+            offset=offset,
+            category=category,
+        )
+
+        return [
+            PushNotificationRead.model_validate(notification)
+            for notification in notifications
+        ]
 
     except Exception as e:
         raise HTTPException(
@@ -290,11 +342,13 @@ async def get_notification_history(
         )
 
 
-@router.get("/stats", response_model=NotificationStats)
+@router.get("/stats", response_model=PushNotificationStatsResponse)
 async def get_notification_stats(
     days: int = 30,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session),
+    analytics_repo: NotificationAnalyticsRepository = Depends(
+        get_notification_analytics_repository
+    ),
 ):
     """
     Получить статистику уведомлений (только для администраторов)
@@ -306,15 +360,10 @@ async def get_notification_stats(
         )
 
     try:
-        # Здесь будет получение статистики из базы данных
-        # Временная заглушка
-        return NotificationStats(
-            total_sent=0,
-            total_delivered=0,
-            total_clicked=0,
-            total_dismissed=0,
-            categories_stats={},
-        )
+        # Получаем статистику через репозиторий
+        stats = await analytics_repo.get_notification_stats(days)
+
+        return PushNotificationStatsResponse.model_validate(stats)
 
     except Exception as e:
         raise HTTPException(
@@ -326,7 +375,9 @@ async def get_notification_stats(
 @router.delete("/cleanup", response_model=dict[str, Any])
 async def cleanup_expired_subscriptions(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session),
+    subscription_repo: PushSubscriptionRepository = Depends(
+        get_push_subscription_repository
+    ),
 ):
     """
     Очистить устаревшие подписки (только для администраторов)
@@ -338,7 +389,8 @@ async def cleanup_expired_subscriptions(
         )
 
     try:
-        cleaned_count = await push_service.cleanup_expired_subscriptions(db)
+        # Очищаем устаревшие подписки через репозиторий
+        cleaned_count = await subscription_repo.cleanup_expired_subscriptions()
 
         return {
             "status": "success",

@@ -115,22 +115,23 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         """Check if running in production environment."""
-        return self.environment.lower() == "production"
+        return str(self.environment).lower() == "production"
 
     @property
     def is_development(self) -> bool:
         """Check if running in development environment."""
-        return self.environment.lower() == "development"
+        return str(self.environment).lower() == "development"
 
     @property
     def database_url_sync(self) -> str:
         """Get synchronous database URL for Alembic."""
-        return self.database_url.replace("+aiosqlite", "")
+        return str(self.database_url).replace("+aiosqlite", "")
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "case_sensitive": False,
+    }
 
 
 # Global settings instance

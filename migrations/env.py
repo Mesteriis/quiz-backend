@@ -4,18 +4,21 @@ Alembic environment configuration for Quiz App.
 This module configures Alembic to work with SQLModel and async database operations.
 """
 
-import asyncio
+import sys
 from logging.config import fileConfig
+from pathlib import Path
 from typing import Any
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
-from sqlalchemy.ext.asyncio import AsyncEngine
-from sqlmodel import SQLModel
+
+# Add src directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from config import settings
+from database import Base
 
-# Import all models to ensure they are registered with SQLModel
+# Import all models to ensure they are registered with SQLAlchemy
 from models import *
 
 # This is the Alembic Config object, which provides
@@ -32,7 +35,7 @@ config.set_main_option("sqlalchemy.url", settings.database_url_sync)
 
 # Add your model's MetaData object here
 # for 'autogenerate' support
-target_metadata = SQLModel.metadata
+target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
@@ -66,27 +69,25 @@ def do_run_migrations(connection: Any) -> None:
         context.run_migrations()
 
 
-async def run_migrations_online() -> None:
+def run_migrations_online() -> None:
     """Run migrations in 'online' mode.
 
     In this scenario we need to create an Engine
     and associate a connection with the context.
     """
-    connectable = AsyncEngine(
-        engine_from_config(
-            config.get_section(config.config_ini_section),
-            prefix="sqlalchemy.",
-            poolclass=pool.NullPool,
-        )
+    connectable = engine_from_config(
+        config.get_section(config.config_ini_section),
+        prefix="sqlalchemy.",
+        poolclass=pool.NullPool,
     )
 
-    async with connectable.connect() as connection:
-        await connection.run_sync(do_run_migrations)
+    with connectable.connect() as connection:
+        do_run_migrations(connection)
 
-    await connectable.dispose()
+    connectable.dispose()
 
 
 if context.is_offline_mode():
     run_migrations_offline()
 else:
-    asyncio.run(run_migrations_online())
+    run_migrations_online()

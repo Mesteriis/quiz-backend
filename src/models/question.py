@@ -1,80 +1,111 @@
 """
 Question model for the Quiz App.
 
-This module contains the Question SQLModel with support for different
-question types and optional image attachments.
+This module contains the Question SQLAlchemy model and corresponding Pydantic schemas
+for creating and managing survey questions.
 """
 
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Dict, List, Optional
 
-from sqlmodel import JSON, Column, Field, Relationship, SQLModel
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    JSON,
+    String,
+    Text,
+    func,
+)
+from sqlalchemy.orm import relationship
+
+from database import Base
 
 
 class QuestionType(str, Enum):
-    """Available question types."""
+    """Types of questions that can be created."""
 
-    RATING_1_10 = "rating_1_10"
-    YES_NO = "yes_no"
-    TEXT = "text"
-    EMAIL = "email"
-    PHONE = "phone"
-    IMAGE_UPLOAD = "image_upload"
-
-
-class QuestionBase(SQLModel):
-    """Base Question model with common fields."""
-
-    title: str = Field(max_length=500, description="Question title")
-    description: str | None = Field(
-        default=None, max_length=2000, description="Question description"
-    )
-    image_url: str | None = Field(
-        default=None, max_length=500, description="Attached image URL"
-    )
-    question_type: QuestionType = Field(description="Type of question")
-    is_required: bool = Field(default=True, description="Whether answer is required")
-    order: int = Field(default=0, description="Question order in survey")
-    options: dict[str, Any] | None = Field(
-        default=None,
-        sa_column=Column(JSON),
-        description="Additional options for question (JSON)",
-    )
+    RATING_1_10 = "RATING_1_10"
+    YES_NO = "YES_NO"
+    TEXT = "TEXT"
+    EMAIL = "EMAIL"
+    PHONE = "PHONE"
+    IMAGE_UPLOAD = "IMAGE_UPLOAD"
+    FILE_UPLOAD = "FILE_UPLOAD"
+    GEOLOCATION = "GEOLOCATION"
+    NFC_SCAN = "NFC_SCAN"
 
 
-class Question(QuestionBase, table=True):
+class Question(Base):
     """Question database model."""
 
-    id: int | None = Field(default=None, primary_key=True)
-    survey_id: int = Field(foreign_key="survey.id", description="Survey ID")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    __tablename__ = "question"
+
+    __table_args__ = {"extend_existing": True}
+    id = Column(Integer, primary_key=True, index=True)
+    survey_id = Column(Integer, ForeignKey("survey.id"), nullable=False)
+
+    # Basic information
+    title = Column(String(500), nullable=False)
+    description = Column(Text, nullable=True)
+    question_type = Column(String(20), nullable=False)
+
+    # Options and configuration
+    is_required = Column(Boolean, default=True, nullable=False)
+    order = Column(Integer, default=0, nullable=False)
+    options = Column(JSON, nullable=True)
+    question_data = Column(JSON, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime, default=func.now(), onupdate=func.now(), nullable=False
+    )
 
     # Relationships
-    survey: "Survey" = Relationship(back_populates="questions")
-    responses: list["Response"] = Relationship(
-        back_populates="question",
-        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    survey = relationship("Survey", back_populates="questions")
+    responses = relationship(
+        "Response", back_populates="question", cascade="all, delete-orphan"
+    )
+
+
+# Pydantic schemas
+class QuestionBase(BaseModel):
+    """Base Question schema with common fields."""
+
+    title: str = Field(max_length=500, description="Question title")
+    description: Optional[str] = Field(None, description="Question description")
+    question_type: QuestionType = Field(description="Type of question")
+    is_required: bool = Field(True, description="Is question required")
+    order: int = Field(0, description="Question order in survey")
+    options: Optional[Dict[str, Any]] = Field(
+        None, description="Question options and configuration"
+    )
+    question_data: Optional[Dict[str, Any]] = Field(
+        None, description="Additional question data and metadata"
     )
 
 
 class QuestionCreate(QuestionBase):
     """Schema for creating a new question."""
 
-    survey_id: int
+    survey_id: int = Field(description="ID of the survey this question belongs to")
 
 
-class QuestionUpdate(SQLModel):
-    """Schema for updating an existing question."""
+class QuestionUpdate(BaseModel):
+    """Schema for updating existing question."""
 
-    title: str | None = Field(default=None, max_length=500)
-    description: str | None = Field(default=None, max_length=2000)
-    image_url: str | None = Field(default=None, max_length=500)
-    question_type: QuestionType | None = Field(default=None)
-    is_required: bool | None = Field(default=None)
-    order: int | None = Field(default=None)
-    options: dict[str, Any] | None = Field(default=None)
+    title: Optional[str] = Field(None, max_length=500)
+    description: Optional[str] = None
+    question_type: Optional[QuestionType] = None
+    is_required: Optional[bool] = None
+    order: Optional[int] = None
+    options: Optional[Dict[str, Any]] = None
+    question_data: Optional[Dict[str, Any]] = None
 
 
 class QuestionRead(QuestionBase):
@@ -85,16 +116,12 @@ class QuestionRead(QuestionBase):
     created_at: datetime
     updated_at: datetime
 
+    model_config = ConfigDict(from_attributes=True)
+
 
 class QuestionReadWithResponses(QuestionRead):
-    """Schema for reading question with responses included."""
+    """Schema for reading question data with responses included."""
 
-    responses: list["ResponseRead"] = []
+    responses: List = Field(default_factory=list)
 
-
-# Forward reference imports (avoid circular imports)
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from models.response import Response, ResponseRead
-    from models.survey import Survey
+    model_config = ConfigDict(from_attributes=True)

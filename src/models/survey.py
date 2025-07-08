@@ -1,82 +1,120 @@
 """
 Survey model for the Quiz App.
 
-This module contains the Survey SQLModel with support for both
-public and private surveys using access tokens.
+This module contains the Survey SQLAlchemy model and corresponding Pydantic schemas
+for creating and managing surveys/quizzes.
 """
 
 from datetime import datetime
-import uuid
+from typing import Optional
 
-from sqlmodel import Field, Relationship, SQLModel
-from .question import QuestionRead
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Integer,
+    String,
+    Text,
+    func,
+    ForeignKey,
+)
+from sqlalchemy.orm import relationship
 
-class SurveyBase(SQLModel):
-    """Base Survey model with common fields."""
-
-    title: str = Field(max_length=200, description="Survey title")
-    description: str | None = Field(
-        default=None, max_length=1000, description="Survey description"
-    )
-    is_active: bool = Field(default=True, description="Whether survey is active")
-    is_public: bool = Field(
-        default=True, description="Whether survey is publicly accessible"
-    )
-    telegram_notifications: bool = Field(
-        default=True, description="Enable Telegram notifications"
-    )
+from database import Base
 
 
-class Survey(SurveyBase, table=True):
+class Survey(Base):
     """Survey database model."""
 
-    id: int | None = Field(default=None, primary_key=True)
-    access_token: str | None = Field(
-        default_factory=lambda: str(uuid.uuid4()),
-        max_length=100,
-        unique=True,
-        index=True,
-        description="Unique access token for private surveys",
+    __tablename__ = "survey"
+
+    __table_args__ = {"extend_existing": True}
+    id = Column(Integer, primary_key=True, index=True)
+
+    # Basic information
+    title = Column(String(500), nullable=False)
+    description = Column(Text, nullable=True)
+
+    # Status fields
+    is_active = Column(Boolean, default=True, nullable=False)
+    is_public = Column(Boolean, default=True, nullable=False)
+    access_token = Column(String(100), nullable=True, index=True)
+
+    # Telegram notifications
+    telegram_notifications = Column(Boolean, default=False, nullable=False)
+
+    # Creator
+    created_by = Column(Integer, ForeignKey("user.id"), nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime, default=func.now(), onupdate=func.now(), nullable=False
     )
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
 
     # Relationships
-    questions: list["Question"] = Relationship(
-        back_populates="survey",
-        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    questions = relationship(
+        "Question", back_populates="survey", cascade="all, delete-orphan"
+    )
+    creator = relationship("User", back_populates="created_surveys")
+    respondent_participations = relationship(
+        "RespondentSurvey", back_populates="survey"
+    )
+    data_requirements = relationship(
+        "SurveyDataRequirements", back_populates="survey", uselist=False
+    )
+
+
+# Pydantic schemas
+class SurveyBase(BaseModel):
+    """Base Survey schema with common fields."""
+
+    title: str = Field(max_length=500, description="Survey title")
+    description: Optional[str] = Field(None, description="Survey description")
+    is_active: bool = Field(True, description="Is survey active")
+    is_public: bool = Field(True, description="Is survey public")
+    access_token: Optional[str] = Field(
+        None, max_length=100, description="Access token for private surveys"
+    )
+    telegram_notifications: bool = Field(
+        False, description="Enable Telegram notifications"
     )
 
 
 class SurveyCreate(SurveyBase):
     """Schema for creating a new survey."""
 
-    pass
+    created_by: Optional[int] = Field(
+        None, description="ID of the user creating the survey"
+    )
 
 
-class SurveyUpdate(SQLModel):
-    """Schema for updating an existing survey."""
+class SurveyUpdate(BaseModel):
+    """Schema for updating existing survey."""
 
-    title: str | None = Field(default=None, max_length=200)
-    description: str | None = Field(default=None, max_length=1000)
-    is_active: bool | None = Field(default=None)
-    is_public: bool | None = Field(default=None)
-    telegram_notifications: bool | None = Field(default=None)
+    title: Optional[str] = Field(None, max_length=500)
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_public: Optional[bool] = None
+    access_token: Optional[str] = Field(None, max_length=100)
+    telegram_notifications: Optional[bool] = None
 
 
 class SurveyRead(SurveyBase):
     """Schema for reading survey data."""
 
     id: int
-    access_token: str
+    created_by: Optional[int] = None
     created_at: datetime
     updated_at: datetime
-    questions_count: int | None = Field(
-        default=0, description="Number of questions in survey"
-    )
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SurveyReadWithQuestions(SurveyRead):
-    """Schema for reading survey with questions included."""
+    """Schema for reading survey data with questions included."""
 
-    questions: list[QuestionRead] = []
+    questions: list[dict] = Field(default_factory=list)
+
+    model_config = ConfigDict(from_attributes=True)

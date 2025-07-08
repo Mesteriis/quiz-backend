@@ -1,41 +1,223 @@
 """
-Фабрики для создания тестовых данных Quiz App.
+Модуль фабрик для создания тестовых данных.
 
-Этот модуль предоставляет фабрики для всех моделей приложения
-с использованием factory_boy и Faker для генерации реалистичных данных.
+Этот модуль объединяет все фабрики для создания тестовых объектов
+с использованием factory_boy и Faker.
 """
+
+# Основные фабрики
+from .user_factory import (
+    UserFactory,
+    AdminUserFactory,
+    TelegramUserFactory,
+    InactiveUserFactory,
+    VerifiedUserFactory,
+    UserWithBioFactory,
+    create_user_with_responses,
+    create_test_users_batch,
+)
+
+from .user_data_factory import (
+    UserDataFactory,
+    TelegramUserDataFactory,
+)
+
+from .survey_factory import (
+    SurveyFactory,
+    PublicSurveyFactory,
+    PrivateSurveyFactory,
+    InactiveSurveyFactory,
+    RecentSurveyFactory,
+    create_survey_with_questions,
+    create_test_surveys_batch,
+)
 
 from .question_factory import (
     QuestionFactory,
-    RatingQuestionFactory,
     TextQuestionFactory,
+    RatingQuestionFactory,
 )
+
+# Старые импорты удалены - используем новые ниже
+
+# Новые фабрики для архитектуры респондентов
+from .profile_factory import (
+    ProfileFactory,
+    CompleteProfileFactory,
+    MinimalProfileFactory,
+    TelegramProfileFactory,
+    BusinessProfileFactory,
+    InternationalProfileFactory,
+    ProfileWithoutPictureFactory,
+    create_profile_for_user,
+    create_telegram_synced_profile,
+    create_profiles_batch,
+)
+
+from .respondent_factory import (
+    RespondentFactory,
+    AuthenticatedRespondentFactory,
+    AnonymousRespondentFactory,
+    TelegramRespondentFactory,
+    TelegramAuthenticatedRespondentFactory,
+    TelegramAnonymousRespondentFactory,
+    MobileRespondentFactory,
+    LocationEnabledRespondentFactory,
+    ActiveRespondentFactory,
+    InactiveRespondentFactory,
+    create_respondent_for_user,
+    create_anonymous_respondent_with_fingerprint,
+    create_telegram_respondent,
+    create_respondents_batch,
+)
+
+from .respondent_survey_factory import (
+    RespondentSurveyFactory,
+    StartedSurveyFactory,
+    InProgressSurveyFactory,
+    AlmostCompletedSurveyFactory,
+    CompletedSurveyFactory,
+    AbandonedSurveyFactory,
+    QuickCompletedSurveyFactory,
+    ThoroughCompletedSurveyFactory,
+    TelegramSurveyFactory,
+    MobileSurveyFactory,
+    create_survey_participation,
+    create_survey_journey,
+    create_participations_batch,
+)
+
+from .consent_log_factory import (
+    ConsentLogFactory,
+    LocationConsentFactory,
+    PreciseLocationConsentFactory,
+    DeviceInfoConsentFactory,
+    PersonalDataConsentFactory,
+    MarketingConsentFactory,
+    AnalyticsConsentFactory,
+    CookiesConsentFactory,
+    TelegramConsentFactory,
+    RevokedConsentFactory,
+    ExpiredConsentFactory,
+    VersionedConsentFactory,
+    create_consent_for_respondent,
+    create_full_consent_set,
+    create_consent_history,
+    create_consents_batch,
+)
+
 from .response_factory import (
-    RatingResponseFactory,
     ResponseFactory,
+    AnonymousResponseFactory,
+    AuthenticatedResponseFactory,
     TextResponseFactory,
+    YesNoResponseFactory,
+    RatingResponseFactory,
+    EmailResponseFactory,
+    PhoneResponseFactory,
+    MultipleChoiceResponseFactory,
+    LocationResponseFactory,
+    FileUploadResponseFactory,
+    ComplexResponseFactory,
+    create_response_for_question,
+    create_response_for_respondent,
+    create_survey_responses,
+    create_responses_batch,
+    create_partial_survey_responses,
 )
-from .survey_factory import PrivateSurveyFactory, PublicSurveyFactory, SurveyFactory
-from .user_data_factory import TelegramUserDataFactory, UserDataFactory
-from .user_factory import AdminUserFactory, UserFactory
 
 __all__ = [
-    # User factories
+    # Основные фабрики
     "UserFactory",
     "AdminUserFactory",
-    # Survey factories
+    "TelegramUserFactory",
+    "InactiveUserFactory",
+    "VerifiedUserFactory",
+    "UserWithBioFactory",
+    "create_user_with_responses",
+    "create_test_users_batch",
+    "UserDataFactory",
+    "TelegramUserDataFactory",
     "SurveyFactory",
     "PublicSurveyFactory",
     "PrivateSurveyFactory",
-    # Question factories
+    "InactiveSurveyFactory",
+    "RecentSurveyFactory",
+    "create_survey_with_questions",
+    "create_test_surveys_batch",
     "QuestionFactory",
     "TextQuestionFactory",
     "RatingQuestionFactory",
-    # Response factories
+    # Response factories (новые с поддержкой Respondent)
     "ResponseFactory",
+    "AnonymousResponseFactory",
+    "AuthenticatedResponseFactory",
     "TextResponseFactory",
+    "YesNoResponseFactory",
     "RatingResponseFactory",
-    # User data factories
-    "UserDataFactory",
-    "TelegramUserDataFactory",
+    "EmailResponseFactory",
+    "PhoneResponseFactory",
+    "MultipleChoiceResponseFactory",
+    "LocationResponseFactory",
+    "FileUploadResponseFactory",
+    "ComplexResponseFactory",
+    "create_response_for_question",
+    "create_response_for_respondent",
+    "create_survey_responses",
+    "create_responses_batch",
+    "create_partial_survey_responses",
+    # Новые фабрики для архитектуры респондентов
+    "ProfileFactory",
+    "CompleteProfileFactory",
+    "MinimalProfileFactory",
+    "TelegramProfileFactory",
+    "BusinessProfileFactory",
+    "InternationalProfileFactory",
+    "ProfileWithoutPictureFactory",
+    "create_profile_for_user",
+    "create_telegram_synced_profile",
+    "create_profiles_batch",
+    "RespondentFactory",
+    "AuthenticatedRespondentFactory",
+    "AnonymousRespondentFactory",
+    "TelegramRespondentFactory",
+    "TelegramAuthenticatedRespondentFactory",
+    "TelegramAnonymousRespondentFactory",
+    "MobileRespondentFactory",
+    "LocationEnabledRespondentFactory",
+    "ActiveRespondentFactory",
+    "InactiveRespondentFactory",
+    "create_respondent_for_user",
+    "create_anonymous_respondent_with_fingerprint",
+    "create_telegram_respondent",
+    "create_respondents_batch",
+    "RespondentSurveyFactory",
+    "StartedSurveyFactory",
+    "InProgressSurveyFactory",
+    "AlmostCompletedSurveyFactory",
+    "CompletedSurveyFactory",
+    "AbandonedSurveyFactory",
+    "QuickCompletedSurveyFactory",
+    "ThoroughCompletedSurveyFactory",
+    "TelegramSurveyFactory",
+    "MobileSurveyFactory",
+    "create_survey_participation",
+    "create_survey_journey",
+    "create_participations_batch",
+    "ConsentLogFactory",
+    "LocationConsentFactory",
+    "PreciseLocationConsentFactory",
+    "DeviceInfoConsentFactory",
+    "PersonalDataConsentFactory",
+    "MarketingConsentFactory",
+    "AnalyticsConsentFactory",
+    "CookiesConsentFactory",
+    "TelegramConsentFactory",
+    "RevokedConsentFactory",
+    "ExpiredConsentFactory",
+    "VersionedConsentFactory",
+    "create_consent_for_respondent",
+    "create_full_consent_set",
+    "create_consent_history",
+    "create_consents_batch",
 ]

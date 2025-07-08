@@ -48,53 +48,44 @@ dependencies = [
     "uvicorn[standard]==0.24.0",
     "jinja2==3.1.2",
     "python-multipart==0.0.6",
-
     # Database
     "sqlmodel==0.0.14",
     "alembic==1.13.0",
     "aiosqlite==0.19.0",
     "sqlalchemy[asyncio]>=2.0.41",
-
     # Validation & Security
     "pydantic==2.5.0",
     "pydantic-settings==2.1.0",
     "python-jose[cryptography]==3.3.0",
     "passlib[bcrypt]==1.7.4",
-
     # HTTP & Telegram
     "httpx==0.25.2",
     "aiohttp==3.9.1",
     "aiogram==3.2.0",
     "slowapi==0.1.9",
-
     # Push Notifications
     "pywebpush==1.14.0",
     "cryptography==41.0.7",
     "ecdsa==0.18.0",
-
     # PDF Generation
     "weasyprint==60.2",
     "reportlab==4.0.7",
-
     # Email Validation
     "email-validator==2.1.0",
     "dnspython==2.4.2",
-
     # Utilities
     "python-dotenv==1.0.0",
     "structlog==23.2.0",
     "pillow==10.1.0",
-
     # Redis & Caching
     "aioredis==2.0.1",
     "redis==5.0.1",
-
     # Monitoring & Analytics
     "psutil==5.9.6",
     "prometheus-client==0.19.0",
-
     # CORS and Additional
     "fastapi-cors==0.0.6",
+    "polyfactory>=2.22.0",
 ]
 
 [project.optional-dependencies]
@@ -129,7 +120,6 @@ dev = [
     "psycopg2-binary>=2.9.9",
 
     # Additional dev tools
-    "factory-boy>=3.3.0",
     "faker>=20.1.0",
     "freezegun>=1.2.2",
     "responses>=0.24.1",
@@ -196,7 +186,6 @@ dev-dependencies = [
     "types-requests>=2.31.0.10",
 
     # Testing utilities
-    "factory-boy>=3.3.0",
     "faker>=20.1.0",
     "freezegun>=1.2.2",
     "responses>=0.24.1",
@@ -350,15 +339,17 @@ addopts = [
     "--cov-report=html",
     "--cov-report=xml",
     "--cov-fail-under=80",
-    "--asyncio-mode=auto",
     "-ra",
     "--tb=short",
+    "--timeout=30",
+    "--timeout-method=thread",
 ]
 testpaths = ["tests"]
 pythonpath = ["src"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+timeout = 30
 markers = [
     "asyncio: mark test as async",
     "slow: mark test as slow",
@@ -377,7 +368,9 @@ filterwarnings = [
     "ignore::UserWarning",
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",
+    "ignore::pytest.PytestUnraisableExceptionWarning",
 ]
+asyncio_mode = "auto"
 
 # Coverage configuration
 [tool.coverage.run]

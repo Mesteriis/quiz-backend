@@ -12,6 +12,7 @@ import json
 import logging
 from typing import Any, Optional
 import uuid
+import asyncio
 
 try:
     import redis.asyncio as redis
@@ -22,7 +23,7 @@ except ImportError:
     REDIS_AVAILABLE = False
     Redis = None
 
-from ..config import get_settings
+from config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -545,9 +546,20 @@ class RedisService:
 
         try:
             keys = []
-            async for key in self.redis.scan_iter(match=pattern):
-                keys.append(key)
+            # Добавляем таймаут для предотвращения зависания
+            async with asyncio.timeout(10):  # 10 секунд таймаут
+                async for key in self.redis.scan_iter(match=pattern):
+                    keys.append(key)
+                    # Ограничиваем количество ключей для предотвращения зависания
+                    if len(keys) >= 1000:  # Максимум 1000 ключей
+                        logger.warning(
+                            f"Reached maximum key limit for pattern {pattern}"
+                        )
+                        break
             return keys
+        except asyncio.TimeoutError:
+            logger.error(f"Timeout getting keys by pattern {pattern}")
+            return []
         except Exception as e:
             logger.error(f"Error getting keys by pattern {pattern}: {e}")
             return []

@@ -108,9 +108,6 @@ app.add_middleware(
 )
 
 
-
-
-
 @app.get("/")
 async def root():
     """Root endpoint for health check."""
@@ -142,10 +139,14 @@ from routers import (
     admin,
     auth,
     notifications,
+    profiles,
+    push_notifications,
     reports,
+    respondents,
     responses,
     surveys,
     telegram,
+    telegram_webapp,
     user_data,
     validation,
 )
@@ -181,9 +182,21 @@ app.include_router(
 app.include_router(
     reports.router, prefix=f"{settings.api_prefix}/reports", tags=["reports"]
 )
-app.include_router(telegram.router, tags=["telegram"])  # Uses its own prefix
+app.include_router(telegram.router, prefix=f"{settings.api_prefix}", tags=["telegram"])
 app.include_router(
     notifications.router, prefix=f"{settings.api_prefix}", tags=["notifications"]
+)
+app.include_router(profiles.router, prefix=f"{settings.api_prefix}", tags=["profiles"])
+app.include_router(
+    respondents.router, prefix=f"{settings.api_prefix}", tags=["respondents"]
+)
+app.include_router(
+    push_notifications.router,
+    prefix=f"{settings.api_prefix}",
+    tags=["push-notifications"],
+)
+app.include_router(
+    telegram_webapp.router, prefix=f"{settings.api_prefix}", tags=["telegram-webapp"]
 )
 if MONITORING_AVAILABLE and monitoring:
     app.include_router(

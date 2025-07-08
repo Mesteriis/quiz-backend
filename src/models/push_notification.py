@@ -1,3 +1,10 @@
+"""
+Push notification SQLAlchemy models for the Quiz App.
+
+This module contains only push notification related SQLAlchemy models
+for database operations and schema definition.
+"""
+
 from datetime import datetime
 
 from sqlalchemy import (
@@ -11,18 +18,18 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.orm import relationship
-from sqlmodel import SQLModel
 
-from .user import User
+from database import Base
 
 
-class PushSubscription(SQLModel, table=True):
+class PushSubscription(Base):
     """Модель подписки пользователя на push-уведомления"""
 
     __tablename__ = "push_subscriptions"
 
+    __table_args__ = {"extend_existing": True}
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=False)
 
     # Данные подписки от браузера
     endpoint = Column(String(500), nullable=False)
@@ -45,7 +52,9 @@ class PushSubscription(SQLModel, table=True):
 
     # Связи
     user = relationship("User", back_populates="push_subscriptions")
-    notifications = relationship("PushNotification", back_populates="subscription")
+    notifications = relationship(
+        "PushNotification", back_populates="subscription", cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         return f"<PushSubscription(user_id={self.user_id}, active={self.is_active})>"
@@ -56,6 +65,7 @@ class PushNotification(Base):
 
     __tablename__ = "push_notifications"
 
+    __table_args__ = {"extend_existing": True}
     id = Column(Integer, primary_key=True, index=True)
     subscription_id = Column(
         Integer, ForeignKey("push_subscriptions.id"), nullable=False
@@ -106,6 +116,7 @@ class NotificationTemplate(Base):
 
     __tablename__ = "notification_templates"
 
+    __table_args__ = {"extend_existing": True}
     id = Column(Integer, primary_key=True, index=True)
 
     # Идентификация
@@ -144,13 +155,14 @@ class NotificationAnalytics(Base):
 
     __tablename__ = "notification_analytics"
 
+    __table_args__ = {"extend_existing": True}
     id = Column(Integer, primary_key=True, index=True)
 
     # Идентификация события
     notification_id = Column(
         Integer, ForeignKey("push_notifications.id"), nullable=True
     )
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=True)
 
     # Данные события
     event_type = Column(
@@ -161,7 +173,7 @@ class NotificationAnalytics(Base):
     platform = Column(String(100))
 
     # Дополнительные данные
-    metadata = Column(JSON)
+    event_metadata = Column(JSON)
     error_details = Column(Text)
 
     # Временная метка
@@ -173,12 +185,3 @@ class NotificationAnalytics(Base):
 
     def __repr__(self):
         return f"<NotificationAnalytics(event_type='{self.event_type}', category='{self.category}')>"
-
-
-# Обновляем модель User для добавления связи с подписками
-def update_user_model():
-    """Обновление модели User для связи с push-подписками"""
-    if not hasattr(User, "push_subscriptions"):
-        User.push_subscriptions = relationship(
-            "PushSubscription", back_populates="user", cascade="all, delete-orphan"
-        )

@@ -1,52 +1,72 @@
 """
 Response model for the Quiz App.
 
-This module contains the Response SQLModel for storing user answers
-to survey questions with immediate save functionality.
+This module contains the Response SQLAlchemy model and corresponding Pydantic schemas
+for storing user responses to survey questions.
 """
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
-from sqlmodel import JSON, Column, Field, Relationship, SQLModel
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, JSON, String, func
+from sqlalchemy.orm import relationship
 
-
-class ResponseBase(SQLModel):
-    """Base Response model with common fields."""
-
-    user_session_id: str = Field(max_length=100, description="User session identifier")
-    user_id: int | None = Field(default=None, description="User ID (if authenticated)")
-    answer: dict[str, Any] = Field(
-        sa_column=Column(JSON), description="User answer data (JSON)"
-    )
+from database import Base
 
 
-class Response(ResponseBase, table=True):
+class Response(Base):
     """Response database model."""
 
-    id: int | None = Field(default=None, primary_key=True)
-    question_id: int = Field(foreign_key="question.id", description="Question ID")
-    user_id: int | None = Field(
-        default=None, foreign_key="user.id", description="User ID (if authenticated)"
-    )
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    __tablename__ = "response"
+
+    __table_args__ = {"extend_existing": True}
+    id = Column(Integer, primary_key=True, index=True)
+    question_id = Column(Integer, ForeignKey("question.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=True)
+    user_session_id = Column(String(100), nullable=False)
+    respondent_id = Column(Integer, ForeignKey("respondents.id"), nullable=True)
+
+    # Response data
+    answer = Column(JSON, nullable=False)
+
+    # Timestamps
+    created_at = Column(DateTime, default=func.now(), nullable=False)
 
     # Relationships
-    question: "Question" = Relationship(back_populates="responses")
-    user: Optional["User"] = Relationship(back_populates="responses")
-    user_data: Optional["UserData"] = Relationship(
+    question = relationship("Question", back_populates="responses")
+    user = relationship("User", back_populates="responses")
+    user_data = relationship(
+        "UserData",
+        foreign_keys=[user_session_id],
+        primaryjoin="Response.user_session_id == UserData.session_id",
         back_populates="responses",
-        sa_relationship_kwargs={
-            "foreign_keys": "[Response.user_session_id]",
-            "primaryjoin": "Response.user_session_id == UserData.session_id",
-        },
     )
+    respondent = relationship("Respondent", back_populates="responses")
+
+
+# Pydantic schemas
+class ResponseBase(BaseModel):
+    """Base Response schema with common fields."""
+
+    answer: Dict[str, Any] = Field(description="Response answer data")
 
 
 class ResponseCreate(ResponseBase):
     """Schema for creating a new response."""
 
+    question_id: int = Field(description="ID of the question being answered")
+    user_id: Optional[int] = Field(None, description="ID of the user (if logged in)")
+    user_session_id: str = Field(description="Session ID of the user")
+    respondent_id: Optional[int] = Field(None, description="ID of the respondent")
+
+
+class ResponseValidate(BaseModel):
+    """Schema for validating response data."""
+
     question_id: int
+    answer: Dict[str, Any]
+    user_session_id: Optional[str] = None
 
 
 class ResponseRead(ResponseBase):
@@ -54,31 +74,31 @@ class ResponseRead(ResponseBase):
 
     id: int
     question_id: int
+    user_id: Optional[int]
+    user_session_id: str
+    respondent_id: Optional[int]
     created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ResponseReadWithQuestion(ResponseRead):
-    """Schema for reading response with question included."""
+    """Schema for reading response data with question included."""
 
-    question: "QuestionRead"
+    question: Optional[Dict[str, Any]] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
-class ResponseSummary(SQLModel):
-    """Summary statistics for responses to a question."""
+class ResponseSummary(BaseModel):
+    """Summary of responses for analytics."""
 
-    question_id: int
-    question_title: str
-    question_type: str
     total_responses: int
-    response_data: dict[str, Any] = Field(
-        sa_column=Column(JSON), description="Aggregated response statistics"
+    unique_users: int
+    responses_by_question: Dict[int, int] = Field(
+        description="Response count by question ID"
     )
-
-
-# Forward reference imports (avoid circular imports)
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from models.question import Question, QuestionRead
-    from models.user import User
-    from models.user_data import UserData
+    average_completion_time: Optional[float] = Field(
+        None, description="Average time to complete"
+    )
+    completion_rate: float = Field(description="Percentage of completed surveys")
