@@ -13,7 +13,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any, Optional, Dict
 
-from polyfactory.factories import BaseFactory
+from polyfactory.factories.sqlalchemy_factory import SQLAlchemyFactory
 from polyfactory.fields import Use, PostGenerated, Require
 from polyfactory.pytest_plugin import register_fixture
 from faker import Faker
@@ -27,7 +27,7 @@ fake = Faker(["en_US", "ru_RU"])
 fake.seed_instance(42)
 
 
-class SurveyModelFactory(BaseFactory[Survey]):
+class SurveyModelFactory(SQLAlchemyFactory[Survey]):
     """
     Фабрика для создания базовых опросов.
 
@@ -91,7 +91,7 @@ class SurveyModelFactory(BaseFactory[Survey]):
         return datetime.utcnow() - timedelta(days=days_ago)
 
     @classmethod
-    def updated_at(cls) -> PostGenerated[datetime]:
+    def updated_at(cls) -> PostGenerated:
         """updated_at после created_at."""
 
         def generate_updated_at(name: str, values: Dict[str, Any]) -> datetime:
@@ -114,7 +114,7 @@ class SurveyModelFactory(BaseFactory[Survey]):
         return None
 
     @classmethod
-    def end_date(cls) -> PostGenerated[Optional[datetime]]:
+    def end_date(cls) -> PostGenerated:
         """Дата окончания после start_date."""
 
         def generate_end_date(name: str, values: Dict[str, Any]) -> Optional[datetime]:
@@ -175,7 +175,7 @@ class ActiveSurveyModelFactory(SurveyModelFactory):
         return datetime.utcnow() - timedelta(days=days_ago)
 
     @classmethod
-    def end_date(cls) -> PostGenerated[datetime]:
+    def end_date(cls) -> PostGenerated:
         """Дата окончания в будущем."""
 
         def generate_future_end_date(name: str, values: Dict[str, Any]) -> datetime:
@@ -186,7 +186,7 @@ class ActiveSurveyModelFactory(SurveyModelFactory):
         return PostGenerated(generate_future_end_date)
 
 
-class QuestionModelFactory(BaseFactory[Question]):
+class QuestionModelFactory(SQLAlchemyFactory[Question]):
     """
     Фабрика для создания вопросов в опросах.
 
@@ -239,7 +239,7 @@ class QuestionModelFactory(BaseFactory[Question]):
 
     # Данные вопроса зависят от типа
     @classmethod
-    def question_data(cls) -> PostGenerated[Optional[Dict[str, Any]]]:
+    def question_data(cls) -> PostGenerated:
         """Данные вопроса в зависимости от типа."""
 
         def generate_question_data(
@@ -309,7 +309,7 @@ class ChoiceQuestionModelFactory(QuestionModelFactory):
         }
 
 
-class ResponseModelFactory(BaseFactory[Response]):
+class ResponseModelFactory(SQLAlchemyFactory[Response]):
     """
     Фабрика для создания ответов пользователей.
 

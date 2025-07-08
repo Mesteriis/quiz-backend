@@ -13,7 +13,7 @@ Pydantic фабрики для API схем пользователей.
 import uuid
 from typing import Optional, Dict, Any
 
-from polyfactory.factories import BaseFactory
+from polyfactory.factories.pydantic_factory import ModelFactory
 from polyfactory.fields import Use, PostGenerated, Require
 from polyfactory.pytest_plugin import register_fixture
 from faker import Faker
@@ -32,7 +32,7 @@ fake = Faker(["en_US", "ru_RU"])
 fake.seed_instance(42)
 
 
-class UserCreateDataFactory(BaseFactory[UserCreate]):
+class UserCreateDataFactory(ModelFactory[UserCreate]):
     """
     Фабрика для данных регистрации пользователей.
 
@@ -53,15 +53,6 @@ class UserCreateDataFactory(BaseFactory[UserCreate]):
         unique_part = uuid.uuid4().hex[:8]
         domain = fake.domain_name()
         return f"newuser_{unique_part}@{domain}"
-
-    @classmethod
-    def password(cls) -> str:
-        """Сложный пароль для регистрации."""
-        # Генерируем пароль, соответствующий требованиям безопасности
-        base = fake.password(
-            length=12, special_chars=True, digits=True, upper_case=True, lower_case=True
-        )
-        return f"{base}1!"  # Гарантируем наличие цифры и спецсимвола
 
     # Персональные данные
     first_name = Use(fake.first_name)
@@ -86,18 +77,13 @@ class ValidUserCreateDataFactory(UserCreateDataFactory):
     """Фабрика для валидных данных регистрации."""
 
     @classmethod
-    def password(cls) -> str:
-        """Гарантированно валидный пароль."""
-        return "ValidPass123!"
-
-    @classmethod
     def email(cls) -> str:
         """Валидный email с проверенным доменом."""
         unique_part = uuid.uuid4().hex[:6]
         return f"valid_{unique_part}@example.com"
 
 
-class UserUpdateDataFactory(BaseFactory[UserUpdate]):
+class UserUpdateDataFactory(ModelFactory[UserUpdate]):
     """
     Фабрика для данных обновления профиля пользователя.
 
@@ -142,7 +128,7 @@ class UserUpdateDataFactory(BaseFactory[UserUpdate]):
         return fake.timezone() if fake.boolean(chance_of_getting_true=20) else None
 
 
-class UserLoginDataFactory(BaseFactory[UserLogin]):
+class UserLoginDataFactory(ModelFactory[UserLogin]):
     """
     Фабрика для данных аутентификации пользователей.
 
@@ -157,21 +143,15 @@ class UserLoginDataFactory(BaseFactory[UserLogin]):
         # В реальных тестах это будет заменено на данные созданного пользователя
         return f"existing_user_{fake.random_int(min=1000, max=9999)}"
 
-    @classmethod
-    def password(cls) -> str:
-        """Пароль для аутентификации."""
-        return "TestPassword123!"
-
 
 @register_fixture(name="user_login_data")
 class ValidUserLoginDataFactory(UserLoginDataFactory):
     """Фабрика для валидных данных входа."""
 
     username = "testuser"
-    password = "ValidPass123!"
 
 
-class TelegramAuthDataFactory(BaseFactory[TelegramAuth]):
+class TelegramAuthDataFactory(ModelFactory[TelegramAuth]):
     """
     Фабрика для данных Telegram аутентификации.
 
@@ -230,7 +210,7 @@ class ValidTelegramAuthDataFactory(TelegramAuthDataFactory):
     last_name = "User"
 
 
-class UserResponseDataFactory(BaseFactory[UserResponse]):
+class UserResponseDataFactory(ModelFactory[UserResponse]):
     """
     Фабрика для данных ответов API пользователей.
 
@@ -266,7 +246,7 @@ class UserResponseDataFactory(BaseFactory[UserResponse]):
     last_name = Use(fake.last_name)
 
     @classmethod
-    def display_name(cls) -> PostGenerated[str]:
+    def display_name(cls):
         """Display name на основе имени и фамилии."""
 
         def generate_display_name(name: str, values: Dict[str, Any]) -> str:
@@ -317,7 +297,7 @@ class UserResponseDataFactory(BaseFactory[UserResponse]):
     )
 
 
-class UserProfileDataFactory(BaseFactory[UserProfile]):
+class UserProfileDataFactory(ModelFactory[UserProfile]):
     """
     Фабрика для расширенных данных профиля пользователя.
 
@@ -374,7 +354,9 @@ class UserProfileDataFactory(BaseFactory[UserProfile]):
     last_login = Use(fake.date_time)
 
 
-# Специализированные фабрики для различных сценариев тестирования
+# ============================================================================
+# SPECIALIZED FACTORIES
+# ============================================================================
 
 
 class PartialUserUpdateDataFactory(UserUpdateDataFactory):
@@ -400,14 +382,14 @@ class AdminUserResponseDataFactory(UserResponseDataFactory):
 
     @classmethod
     def username(cls) -> str:
-        """Админский username."""
+        """Админы всегда имеют username."""
         return f"admin_{uuid.uuid4().hex[:6]}"
 
     @classmethod
     def email(cls) -> str:
-        """Админский email."""
+        """Админы всегда имеют email."""
         unique_part = uuid.uuid4().hex[:6]
-        return f"admin_{unique_part}@admin.example.com"
+        return f"admin_{unique_part}@example.com"
 
 
 class TelegramUserResponseDataFactory(UserResponseDataFactory):
@@ -417,13 +399,12 @@ class TelegramUserResponseDataFactory(UserResponseDataFactory):
     username = None
     email = None
 
-    # Но всегда имеют Telegram данные
     @classmethod
     def telegram_id(cls) -> int:
-        """Telegram ID обязателен."""
+        """Telegram пользователи всегда имеют telegram_id."""
         return fake.random_int(min=100000000, max=999999999)
 
     @classmethod
     def telegram_username(cls) -> str:
-        """Telegram username обязателен."""
-        return f"tguser_{uuid.uuid4().hex[:8]}"
+        """Telegram username."""
+        return f"tg_{uuid.uuid4().hex[:8]}"

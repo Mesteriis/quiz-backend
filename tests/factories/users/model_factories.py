@@ -116,7 +116,7 @@ class UserModelFactory(SQLAlchemyFactory[User]):
 
     # PostGenerated поля, зависящие от других
     @classmethod
-    def updated_at(cls) -> PostGenerated[datetime]:
+    def updated_at(cls) -> PostGenerated:
         """updated_at после created_at."""
 
         def generate_updated_at(name: str, values: dict[str, Any]) -> datetime:
@@ -131,7 +131,7 @@ class UserModelFactory(SQLAlchemyFactory[User]):
         return PostGenerated(generate_updated_at)
 
     @classmethod
-    def last_login(cls) -> PostGenerated[datetime]:
+    def last_login(cls) -> PostGenerated:
         """last_login после created_at."""
 
         def generate_last_login(name: str, values: dict[str, Any]) -> datetime:
@@ -179,7 +179,7 @@ class AdminUserModelFactory(UserModelFactory):
 
     # Админы логинятся чаще
     @classmethod
-    def last_login(cls) -> PostGenerated[datetime]:
+    def last_login(cls) -> PostGenerated:
         """Админы логинятся в последние 7 дней."""
 
         def generate_admin_last_login(name: str, values: dict[str, Any]) -> datetime:
@@ -219,7 +219,7 @@ class TelegramUserModelFactory(UserModelFactory):
 
     # Используем Telegram данные для display_name
     @classmethod
-    def display_name(cls) -> PostGenerated[str]:
+    def display_name(cls) -> PostGenerated:
         """display_name на основе Telegram имени."""
 
         def generate_display_name(name: str, values: dict[str, Any]) -> str:
@@ -251,7 +251,7 @@ class InactiveUserModelFactory(UserModelFactory):
 
     # Давно не логинились
     @classmethod
-    def last_login(cls) -> PostGenerated[datetime]:
+    def last_login(cls) -> PostGenerated:
         """Неактивные пользователи давно не логинились."""
 
         def generate_inactive_last_login(name: str, values: dict[str, Any]) -> datetime:
@@ -293,7 +293,7 @@ class PredictableUserModelFactory(UserModelFactory):
 
     # Предсказуемые статусы на основе номера пользователя
     @classmethod
-    def is_verified(cls) -> PostGenerated[bool]:
+    def is_verified(cls) -> PostGenerated:
         """Четные пользователи верифицированы."""
 
         def generate_verified_status(name: str, values: dict[str, Any]) -> bool:
@@ -304,7 +304,7 @@ class PredictableUserModelFactory(UserModelFactory):
         return PostGenerated(generate_verified_status)
 
     @classmethod
-    def is_admin(cls) -> PostGenerated[bool]:
+    def is_admin(cls) -> PostGenerated:
         """Каждый 10-й пользователь - админ."""
 
         def generate_admin_status(name: str, values: dict[str, Any]) -> bool:

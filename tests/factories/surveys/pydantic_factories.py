@@ -4,17 +4,16 @@ Pydantic фабрики для API схем опросов.
 Генерируют данные для:
 - Создания опросов (SurveyCreate)
 - Обновления опросов (SurveyUpdate)
-- Создания вопросов (QuestionCreate)
 - Ответов API (SurveyResponse)
 
-Поддерживают сложные сценарии с различными типами вопросов.
+Поддерживают сложные сценарии с различными типами опросов.
 """
 
 import uuid
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 
-from polyfactory.factories import BaseFactory
+from polyfactory.factories.pydantic_factory import ModelFactory
 from polyfactory.fields import Use, PostGenerated, Require
 from polyfactory.pytest_plugin import register_fixture
 from faker import Faker
@@ -23,17 +22,14 @@ from src.schemas.survey import (
     SurveyCreate,
     SurveyUpdate,
     SurveyResponse,
-    SurveyListResponse,
 )
-from src.schemas.question import QuestionCreate, QuestionResponse
-from src.schemas.response import ResponseCreate, ResponseData
 
 # Глобальный faker
 fake = Faker(["en_US", "ru_RU"])
 fake.seed_instance(42)
 
 
-class SurveyCreateDataFactory(BaseFactory[SurveyCreate]):
+class SurveyCreateDataFactory(ModelFactory[SurveyCreate]):
     """
     Фабрика для данных создания опросов.
 
@@ -75,7 +71,7 @@ class SurveyCreateDataFactory(BaseFactory[SurveyCreate]):
         return None
 
     @classmethod
-    def end_date(cls) -> PostGenerated[Optional[datetime]]:
+    def end_date(cls):
         """Дата окончания после start_date."""
 
         def generate_end_date(name: str, values: Dict[str, Any]) -> Optional[datetime]:
@@ -115,7 +111,7 @@ class ValidSurveyCreateDataFactory(SurveyCreateDataFactory):
     max_responses = None
 
 
-class SurveyUpdateDataFactory(BaseFactory[SurveyUpdate]):
+class SurveyUpdateDataFactory(ModelFactory[SurveyUpdate]):
     """
     Фабрика для данных обновления опросов.
 
@@ -158,153 +154,7 @@ class SurveyUpdateDataFactory(BaseFactory[SurveyUpdate]):
         return fake.boolean() if fake.boolean(chance_of_getting_true=20) else None
 
 
-class QuestionCreateDataFactory(BaseFactory[QuestionCreate]):
-    """
-    Фабрика для данных создания вопросов.
-
-    Генерирует данные для POST /surveys/{id}/questions запросов.
-    """
-
-    __model__ = QuestionCreate
-
-    @classmethod
-    def title(cls) -> str:
-        """Заголовок вопроса."""
-        return fake.sentence(nb_words=6).rstrip(".") + "?"
-
-    @classmethod
-    def description(cls) -> Optional[str]:
-        """Описание вопроса (70% случаев)."""
-        return (
-            fake.paragraph(nb_sentences=1)
-            if fake.boolean(chance_of_getting_true=70)
-            else None
-        )
-
-    @classmethod
-    def question_type(cls) -> str:
-        """Тип вопроса."""
-        return fake.random_element(
-            [
-                "TEXT",
-                "NUMBER",
-                "EMAIL",
-                "BOOLEAN",
-                "SINGLE_CHOICE",
-                "MULTIPLE_CHOICE",
-                "SCALE",
-            ]
-        )
-
-    is_required = Use(lambda: fake.boolean(chance_of_getting_true=75))
-    order = Use(lambda: fake.random_int(min=1, max=20))
-
-    @classmethod
-    def question_data(cls) -> PostGenerated[Optional[Dict[str, Any]]]:
-        """Данные вопроса в зависимости от типа."""
-
-        def generate_question_data(
-            name: str, values: Dict[str, Any]
-        ) -> Optional[Dict[str, Any]]:
-            question_type = values.get("question_type", "TEXT")
-
-            if question_type in ["SINGLE_CHOICE", "MULTIPLE_CHOICE"]:
-                options = [
-                    fake.word().title() for _ in range(fake.random_int(min=2, max=5))
-                ]
-                return {
-                    "options": options,
-                    "allow_other": fake.boolean(chance_of_getting_true=30),
-                }
-            elif question_type == "SCALE":
-                return {
-                    "min_value": 1,
-                    "max_value": fake.random_int(min=5, max=10),
-                    "step": 1,
-                    "min_label": fake.word(),
-                    "max_label": fake.word(),
-                }
-
-            return None
-
-        return PostGenerated(generate_question_data)
-
-
-@register_fixture(name="question_create_data")
-class TextQuestionCreateDataFactory(QuestionCreateDataFactory):
-    """Фабрика для создания текстовых вопросов."""
-
-    question_type = "TEXT"
-    question_data = None
-
-    @classmethod
-    def title(cls) -> str:
-        """Текстовый вопрос."""
-        return f"What is your opinion about {fake.word().lower()}?"
-
-
-class ChoiceQuestionCreateDataFactory(QuestionCreateDataFactory):
-    """Фабрика для создания вопросов с выбором."""
-
-    @classmethod
-    def question_type(cls) -> str:
-        """Тип выбора."""
-        return fake.random_element(["SINGLE_CHOICE", "MULTIPLE_CHOICE"])
-
-    @classmethod
-    def question_data(cls) -> Dict[str, Any]:
-        """Данные для выбора."""
-        options = ["Отлично", "Хорошо", "Удовлетворительно", "Плохо"]
-        return {"options": options, "allow_other": True}
-
-
-class ResponseCreateDataFactory(BaseFactory[ResponseCreate]):
-    """
-    Фабрика для данных создания ответов.
-
-    Генерирует данные для POST /responses запросов.
-    """
-
-    __model__ = ResponseCreate
-
-    @classmethod
-    def user_session_id(cls) -> str:
-        """Уникальный ID сессии."""
-        return f"session_{uuid.uuid4().hex[:16]}"
-
-    @classmethod
-    def answer(cls) -> Dict[str, Any]:
-        """Базовый ответ."""
-        return {"text": fake.sentence(), "timestamp": datetime.utcnow().isoformat()}
-
-    # question_id будет передан при создании
-
-
-@register_fixture(name="response_create_data")
-class TextResponseCreateDataFactory(ResponseCreateDataFactory):
-    """Фабрика для текстовых ответов."""
-
-    @classmethod
-    def answer(cls) -> Dict[str, Any]:
-        """Текстовый ответ."""
-        return {"text": fake.paragraph(nb_sentences=2)}
-
-
-class ChoiceResponseCreateDataFactory(ResponseCreateDataFactory):
-    """Фабрика для ответов с выбором."""
-
-    @classmethod
-    def answer(cls) -> Dict[str, Any]:
-        """Ответ с выбором."""
-        return {
-            "selected_options": [0, 2],
-            "other_text": fake.sentence()
-            if fake.boolean(chance_of_getting_true=30)
-            else None,
-        }
-
-
-class SurveyResponseDataFactory(BaseFactory[SurveyResponse]):
+class SurveyResponseDataFactory(ModelFactory[SurveyResponse]):
     """
     Фабрика для данных ответов API опросов.
 
@@ -370,65 +220,24 @@ class SurveyResponseDataFactory(BaseFactory[SurveyResponse]):
 
     @classmethod
     def start_date(cls) -> Optional[datetime]:
-        """Дата начала."""
-        return fake.date_time() if fake.boolean(chance_of_getting_true=30) else None
+        """Дата начала опроса."""
+        if fake.boolean(chance_of_getting_true=30):
+            days_from_now = fake.random_int(min=-30, max=30)
+            return datetime.utcnow() + timedelta(days=days_from_now)
+        return None
 
     @classmethod
     def end_date(cls) -> Optional[datetime]:
-        """Дата окончания."""
-        return fake.date_time() if fake.boolean(chance_of_getting_true=30) else None
+        """Дата окончания опроса."""
+        if fake.boolean(chance_of_getting_true=50):
+            days_from_now = fake.random_int(min=7, max=90)
+            return datetime.utcnow() + timedelta(days=days_from_now)
+        return None
 
 
-class SurveyListResponseDataFactory(BaseFactory[SurveyListResponse]):
-    """
-    Фабрика для данных списка опросов.
-
-    Генерирует данные для GET /surveys запросов.
-    """
-
-    __model__ = SurveyListResponse
-
-    @classmethod
-    def surveys(cls) -> List[Dict[str, Any]]:
-        """Список опросов."""
-        count = fake.random_int(min=1, max=10)
-        return [SurveyResponseDataFactory.build().__dict__ for _ in range(count)]
-
-    @classmethod
-    def total(cls) -> PostGenerated[int]:
-        """Общее количество опросов."""
-
-        def generate_total(name: str, values: Dict[str, Any]) -> int:
-            surveys = values.get("surveys", [])
-            base_count = len(surveys)
-            return base_count + fake.random_int(min=0, max=50)
-
-        return PostGenerated(generate_total)
-
-    @classmethod
-    def page(cls) -> int:
-        """Номер страницы."""
-        return fake.random_int(min=1, max=10)
-
-    @classmethod
-    def page_size(cls) -> int:
-        """Размер страницы."""
-        return fake.random_element([10, 20, 50])
-
-    @classmethod
-    def has_next(cls) -> PostGenerated[bool]:
-        """Есть ли следующая страница."""
-
-        def generate_has_next(name: str, values: Dict[str, Any]) -> bool:
-            page = values.get("page", 1)
-            page_size = values.get("page_size", 10)
-            total = values.get("total", 0)
-            return (page * page_size) < total
-
-        return PostGenerated(generate_has_next)
-
-
-# Специализированные фабрики для различных сценариев
+# ============================================================================
+# SPECIALIZED FACTORIES
+# ============================================================================
 
 
 class PublicSurveyCreateDataFactory(SurveyCreateDataFactory):
@@ -471,12 +280,11 @@ class ActiveSurveyResponseDataFactory(SurveyResponseDataFactory):
         return datetime.utcnow() - timedelta(days=days_ago)
 
     @classmethod
-    def end_date(cls) -> PostGenerated[datetime]:
+    def end_date(cls):
         """Дата окончания в будущем."""
 
         def generate_future_end_date(name: str, values: Dict[str, Any]) -> datetime:
-            start_date = values.get("start_date", datetime.utcnow())
-            days_duration = fake.random_int(min=30, max=90)
-            return start_date + timedelta(days=days_duration)
+            days_future = fake.random_int(min=7, max=90)
+            return datetime.utcnow() + timedelta(days=days_future)
 
         return PostGenerated(generate_future_end_date)

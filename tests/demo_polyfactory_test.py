@@ -167,7 +167,7 @@ class TestPolyfactoryDemo:
         # Проверяем структуру
         assert hasattr(user_create_data, "username")
         assert hasattr(user_create_data, "email")
-        assert hasattr(user_create_data, "password")
+        assert hasattr(user_create_data, "telegram_id")
 
         assert hasattr(survey_create_data, "title")
         assert hasattr(survey_create_data, "description")

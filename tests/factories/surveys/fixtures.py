@@ -35,9 +35,6 @@ from .model_factories import (
 from .pydantic_factories import (
     SurveyCreateDataFactory,
     ValidSurveyCreateDataFactory,
-    QuestionCreateDataFactory,
-    TextQuestionCreateDataFactory,
-    ResponseCreateDataFactory,
     PublicSurveyCreateDataFactory,
     PrivateSurveyCreateDataFactory,
 )
@@ -415,19 +412,31 @@ def private_survey_create_data():
 @pytest.fixture
 def question_create_data():
     """Фикстура для данных создания вопроса."""
-    return QuestionCreateDataFactory.build()
+    return {
+        "title": "Test Question",
+        "description": "This is a test question",
+        "question_type": "TEXT",
+        "is_required": True,
+        "order": 1,
+    }
 
 
 @pytest.fixture
 def text_question_create_data():
     """Фикстура для данных создания текстового вопроса."""
-    return TextQuestionCreateDataFactory.build()
+    return {
+        "title": "Text Question",
+        "description": "Enter your answer",
+        "question_type": "TEXT",
+        "is_required": True,
+        "order": 1,
+    }
 
 
 @pytest.fixture
 def response_create_data():
     """Фикстура для данных создания ответа."""
-    return ResponseCreateDataFactory.build()
+    return {"answer": {"text": "Test answer"}, "user_session_id": "test_session_123"}
 
 
 # ============================================================================

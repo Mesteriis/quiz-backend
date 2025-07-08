@@ -372,16 +372,15 @@ def test_settings():
     - Устанавливает тестовые токены
     """
     return Settings(
-        TESTING=True,
-        DATABASE_URL="sqlite+aiosqlite:///:memory:",  # In-memory для быстроты
-        JWT_SECRET_KEY="test-secret-key-for-testing-only-not-for-production",
-        JWT_ALGORITHM="HS256",
-        JWT_ACCESS_TOKEN_EXPIRE_MINUTES=1440,  # 24 часа для тестов
-        REDIS_URL="memory://localhost",
-        TELEGRAM_BOT_TOKEN="123456789:test-token-for-testing-only",
-        TELEGRAM_WEBHOOK_URL="https://example.com/webhook",
-        LOG_LEVEL="WARNING",  # Уменьшаем шум в тестах
-        ENABLE_EXTERNAL_SERVICES=False,  # Отключаем внешние сервисы
+        database_url="sqlite+aiosqlite:///:memory:",  # In-memory для быстроты
+        secret_key="test-secret-key-for-testing-only-not-for-production",
+        algorithm="HS256",
+        access_token_expire_minutes=1440,  # 24 часа для тестов
+        telegram_bot_token="123456789:test-token-for-testing-only",
+        telegram_webhook_url="https://example.com/webhook",
+        log_level="WARNING",  # Уменьшаем шум в тестах
+        environment="testing",
+        debug=False,
     )
 
 
